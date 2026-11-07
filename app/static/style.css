@@ -298,15 +298,19 @@ ul.tree ul.sub .card { padding-top: .35rem; padding-bottom: .35rem; }
 ul.tree ul.sub .thumb { width: 48px; height: 48px; }
 ul.tree ul.sub .card.has-toggle { grid-template-columns: 2.2rem 48px 1fr auto; }
 button.toggle { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
-  width: 2rem; height: 2.6rem; padding: 0; border: 0; background: none; color: var(--muted); border-radius: 6px; }
+  width: 2.2rem; height: 2.6rem; padding: 0; border: 0; background: none; color: var(--muted); border-radius: 6px; }
 button.toggle:hover { background: var(--accent-soft); color: var(--ink); }
-button.toggle .caret { font-size: 1rem; line-height: 1; transition: transform .15s; }
+button.toggle .caret { font-size: 1.6rem; line-height: 1; transition: transform .15s; }
 button.toggle[aria-expanded=true] .caret { transform: rotate(90deg); }
-button.toggle .n { font-size: .7rem; line-height: 1.2; }
+.card-note { font-size: .78rem; font-weight: 400; color: var(--muted); margin-top: .1rem; }
+.card-value { text-align: right; }
 .toggle-spacer { width: 2rem; }
 @media (max-width: 640px) {
   ul.tree ul.sub { margin-left: .7rem; padding-left: .5rem; }
   ul.tree .card.has-toggle, ul.tree ul.sub .card.has-toggle { grid-template-columns: 1.8rem 48px 1fr auto; gap: .6rem; }
   ul.tree .thumb { width: 48px; height: 48px; }
   button.toggle, .toggle-spacer { width: 1.7rem; }
+}
+@media (max-width: 640px) {
+  .card-value .card-note { max-width: 6.5rem; white-space: normal; margin-left: auto; line-height: 1.25; }
 }

@@ -509,9 +509,11 @@ def attach_contents(rows, status="active"):
     def fill(row, seen):
         row["children"] = [c for c in by_parent.get(row["id"], []) if c["id"] not in seen]
         row["n_inside"] = 0
+        row["cost_incl"] = cost_basis(row)
         for c in row["children"]:
             fill(c, seen | {c["id"]})
             row["n_inside"] += 1 + c["n_inside"]
+            row["cost_incl"] += c["cost_incl"]
 
     for r in rows:
         fill(r, {r["id"]})

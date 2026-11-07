@@ -22,9 +22,11 @@
       <a class="card-title" href="{{ url_for('item_view', item_id=r.id) }}">{{ r.name }}</a>
       <div class="card-meta"><code class="ref">{{ r.ref }}</code>{% if r.quantity and r.quantity > 1 %} <span class="qty">×{{ r.quantity }}</span>{% endif %} {% if r.status != 'active' %}{{ status_badge(r.status) }}{% endif %}</div>
       {% if show_where %}<div class="card-where">{{ where(r) }}</div>{% endif %}
+      {% if r.children %}<div class="card-note">({{ r.n_inside }} subitem{{ '' if r.n_inside == 1 else 's' }})</div>{% endif %}
     </div>
     <div class="card-value">
       {% if r.status == 'sold' %}{{ r.disposal_price|money }}{% else %}{{ known_cost(r)|money('') }}{% endif %}
+      {% if r.children and r.cost_incl and (r.cost_incl - (known_cost(r) or 0))|abs > 0.005 %}<div class="card-note">({{ r.cost_incl|money }} including subitems)</div>{% endif %}
     </div>
 {%- endmacro %}
 
@@ -46,7 +48,7 @@
     <div class="card st-{{ r.status }} has-toggle">
       {% if r.children %}
       <button type="button" class="toggle" aria-expanded="false" title="Show what's inside">
-        <span class="caret">▸</span><span class="n">{{ r.n_inside }}</span></button>
+        <span class="caret">▸</span></button>
       {% else %}<span class="toggle-spacer"></span>{% endif %}
       {{ card_inner(r, False) }}
     </div>
