@@ -14,6 +14,8 @@ Python/Flask + SQLite, one container, no external services. Everything (database
 - **Photos**: multiple per item, auto-rotated, resized and thumbnailed, with a choice of main photo.
 - **User-defined descriptors** (Manufacturer, Model, Serial number, Version…). Set them up in Settings.
 - **Purchase info**: date, price, seller and platform (autocompletes from earlier entries).
+- **Valuations**: a dated history of what each item is worth, each with a source (eBay sold listings, a dealer quote…). The latest one is the current value.
+- **Work log**: a dated entry for each repair or job, with what was done and what it cost. The item page shows a cost breakdown: purchase + work = total.
 - **Sold / given away / scrapped**: date, price and destination. Optionally the contents go with the item.
 - **Break for spares**: mark a donor item as broken down and list the parts removed. Each part becomes its own item (with a reference number and a link back to the donor) and has one of these outcomes:
   - *Keep as spare*: goes to a location with an attached value.
@@ -102,9 +104,12 @@ Reference prefix/digits, currency symbol, site name and descriptors are set in *
 
 ## How values are counted
 
-- **Collection value** = each in-collection item's *current value*, or its purchase price if no value is set. Parts listed inside an item are counted separately, so give a computer a value that excludes the parts you've listed inside it.
+- **Current value** = the latest valuation + the cost of any work logged *after* that valuation's date. Work on or before the valuation date is taken to be reflected in it already.
+- **Cost** = purchase price + all work log costs. Profit on a sale is the sale price minus this.
+- **Collection value** = each in-collection item's current value, or its cost if it has never been valued. Parts listed inside an item are counted separately, so give a computer a value that excludes the parts you've listed inside it.
+- Values attached during **Break for spares** (shell value, spare and repair parts) are added to the value history with the breakdown date.
 - **Recovered from a breakdown** = parts sold (sale price) + parts used in repairs (attached value) + parts kept as spares (attached value).
-- **Net for a breakdown** = recovered + remaining shell value (or what the shell sold for) − what the donor cost.
+- **Net for a breakdown** = recovered + remaining shell value (or what the shell sold for) − what the donor cost (purchase + work).
 
 ## Backups
 

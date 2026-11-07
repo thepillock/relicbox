@@ -35,8 +35,12 @@
 
     <dl class="facts">
       {% for d in descriptors %}<dt>{{ d.name }}</dt><dd>{{ d.value }}</dd>{% endfor %}
-      {% if item.barcode %}<dt>Barcode</dt><dd class="mono">{{ item.barcode }}</dd>{% endif %}
-      <dt>Value</dt><dd>{{ item.value|money }}{% if contents_value %} <span class="muted">(+ {{ contents_value|money }} of parts inside)</span>{% endif %}</dd>
+      {% if item.barcode %}<dt>Product barcode</dt><dd class="mono">{{ item.barcode }}</dd>{% endif %}
+      <dt>Value</dt><dd>{% if latest %}{{ item.value|money }}
+          <div class="muted small">valued {{ latest.date }}{% if latest.source %} · {{ latest.source }}{% endif %}{% if work_since %} · + {{ work_since|money }} work since{% endif %}</div>
+        {% else %}{{ known_cost(item)|money }} <div class="muted small">{{ 'what it has cost so far · ' if known_cost(item) is not none }}not valued yet</div>{% endif %}
+        {% if contents_value %}<div class="muted small">+ {{ contents_value|money }} of parts inside</div>{% endif %}
+        <a class="small" href="#value">Valuations</a></dd>
       {% if donor %}<dt>Harvested from</dt><dd><a href="{{ url_for('item_view', item_id=donor.id) }}">{{ donor.ref }} — {{ donor.name }}</a></dd>{% endif %}
     </dl>
 
@@ -48,13 +52,23 @@
       <dt>Platform</dt><dd>{{ item.purchase_platform or '—' }}</dd>
     </dl>
 
+    {% if work %}
+    <h3>Cost</h3>
+    <table class="totals">
+      <tr><td>Purchase</td><td>{{ item.purchase_price|money }}</td></tr>
+      <tr><td><a href="#work">Work done</a> ({{ work|length }} entr{{ 'y' if work|length == 1 else 'ies' }})</td><td>{{ item.work_cost|money }}</td></tr>
+      <tr class="net"><td>Total</td><td>{{ cost_basis(item)|money }}</td></tr>
+    </table>
+    {% endif %}
+
     {% if item.status in ('sold', 'given_away', 'scrapped') %}
     <h3>{{ STATUSES[item.status] }}</h3>
     <dl class="facts">
       <dt>Date</dt><dd>{{ item.disposal_date or '—' }}</dd>
       {% if item.status == 'sold' %}<dt>Price</dt><dd>{{ item.disposal_price|money }}
-        {% if item.purchase_price is not none and item.disposal_price is not none and not item.harvested_from_id %}
-          <span class="muted">({{ 'profit' if item.disposal_price >= item.purchase_price else 'loss' }} {{ (item.disposal_price - item.purchase_price)|abs|money }})</span>{% endif %}</dd>{% endif %}
+        {% if known_cost(item) is not none and item.disposal_price is not none and not item.harvested_from_id %}
+          {% set pl = item.disposal_price - cost_basis(item) %}
+          <span class="muted">({{ 'profit' if pl >= 0 else 'loss' }} {{ pl|abs|money }}{{ ' after work costs' if item.work_cost }})</span>{% endif %}</dd>{% endif %}
       {% if item.disposal_destination %}<dt>To</dt><dd>{{ item.disposal_destination }}</dd>{% endif %}
     </dl>
     {% endif %}
@@ -87,15 +101,84 @@
   </div>
 </div>
 
+<section id="work">
+  <h2>Work log <small class="muted">{{ work|length }}{% if item.work_cost %} · {{ item.work_cost|money }}{% endif %}</small></h2>
+  {% if work %}
+  <ul class="log">
+    {% for w in work %}
+    <li>
+      <div class="log-head"><span class="log-date">{{ w.date }}</span>{% if w.cost is not none %}<span class="log-cost">{{ w.cost|money }}</span>{% endif %}</div>
+      <div class="log-text">{{ w.description }}</div>
+      <details class="log-edit">
+        <summary>Edit</summary>
+        <form method="post" action="{{ url_for('work_edit', entry_id=w.id) }}" class="stack">
+          <div class="grid">
+            <label>Date<input type="date" name="date" value="{{ w.date }}" required></label>
+            <label>Cost ({{ currency }})<input name="cost" inputmode="decimal" value="{{ w.cost|num }}"></label>
+          </div>
+          <textarea name="description" rows="3" class="full" required>{{ w.description }}</textarea>
+          <div class="formbar"><button class="btn small primary">Save</button></div>
+        </form>
+        <form method="post" action="{{ url_for('work_delete', entry_id=w.id) }}" class="inline" data-confirm="Delete this log entry?"><button class="link danger">Delete entry</button></form>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <details class="addbox" {{ 'open' if not work }}>
+    <summary class="btn small">+ Add log entry</summary>
+    <form method="post" action="{{ url_for('work_add', item_id=item.id) }}" class="stack">
+      <div class="grid">
+        <label>Date<input type="date" name="date" value="{{ today }}" required></label>
+        <label>Cost ({{ currency }})<input name="cost" inputmode="decimal" placeholder="parts, postage, tools…"></label>
+      </div>
+      <label class="stacked">What was done<textarea name="description" rows="3" class="full" required placeholder="e.g. Replaced leaking caps C12–C15, recapped PSU"></textarea></label>
+      <div class="formbar"><button class="btn primary small">Add entry</button></div>
+    </form>
+  </details>
+  <p class="hint">Costs are added to what the item has cost, and to its value if they're dated after its latest valuation.</p>
+</section>
+
+<section id="value">
+  <h2>Valuations <small class="muted">{{ valuations|length }}</small></h2>
+  {% if valuations %}
+  <div class="tablewrap">
+  <table class="data">
+    <thead><tr><th>Date</th><th>Source</th><th class="num">Value</th><th></th></tr></thead>
+    <tbody>
+    {% for v in valuations %}
+      <tr{% if loop.first %} class="current"{% endif %}><td>{{ v.date }}</td><td>{{ v.source or '' }}</td><td class="num">{{ v.value|money }}</td>
+        <td class="num"><form method="post" action="{{ url_for('valuation_delete', val_id=v.id) }}" class="inline" data-confirm="Delete this valuation?"><button class="link danger">Delete</button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  <details class="addbox" {{ 'open' if not valuations }}>
+    <summary class="btn small">+ Add valuation</summary>
+    <form method="post" action="{{ url_for('valuation_add', item_id=item.id) }}" class="stack">
+      <div class="grid">
+        <label>Date<input type="date" name="date" value="{{ today }}" required></label>
+        <label>Value ({{ currency }})<input name="value" inputmode="decimal" required></label>
+        <label>Source<input name="source" list="val-sources" placeholder="eBay sold listings, dealer quote…" autocomplete="off"></label>
+      </div>
+      <datalist id="val-sources">{% for s in sources %}<option value="{{ s }}">{% endfor %}</datalist>
+      <div class="formbar"><button class="btn primary small">Add valuation</button></div>
+    </form>
+  </details>
+  <p class="hint">The latest valuation is the item's current value. Value it without the parts listed inside it, as those are counted separately.</p>
+</section>
+
 {% if item.broken_date or parts %}
 <section>
   <h2>Parts harvested{% if item.broken_date %} <small class="muted">broken down {{ item.broken_date }}</small>{% endif %}</h2>
   {% include '_parts_table.html' %}
   <table class="totals">
     <tr><td>Bought for</td><td>{{ item.purchase_price|money }}</td></tr>
+    {% if item.work_cost %}<tr><td>Work done</td><td>{{ item.work_cost|money }}</td></tr>{% endif %}
     <tr><td>Recovered from parts</td><td>{{ part_totals.recovered|money }}</td></tr>
     <tr><td>{{ 'Shell sold for' if item.status == 'sold' else 'Remaining shell value' }}</td><td>{{ shell|money }}</td></tr>
-    {% set net = part_totals.recovered + shell - (item.purchase_price or 0) %}
+    {% set net = part_totals.recovered + shell - cost_basis(item) %}
     <tr class="net"><td>Net</td><td class="{{ 'pos' if net >= 0 else 'neg' }}">{{ net|money }}</td></tr>
   </table>
 </section>

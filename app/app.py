@@ -319,6 +319,51 @@ def shell_value(donor):
     return 0.0
 
 
+# --- value history and work log ------------------------------------------------
+def cost_basis(it):
+    """What an item has cost: purchase price plus logged work."""
+    return (it["purchase_price"] or 0) + (it["work_cost"] or 0)
+
+
+def known_cost(it):
+    """cost_basis, or None when nothing has been recorded (for display)."""
+    return cost_basis(it) if it["purchase_price"] is not None or it["work_cost"] else None
+
+
+def effective_value(it):
+    """Current value for totals: the latest valuation (plus later work), else what it has cost."""
+    return it["value"] if it["value"] is not None else cost_basis(it)
+
+
+def refresh_value(item_id):
+    """Recompute the cached items.value and items.work_cost from valuations and the work log.
+
+    Current value = latest valuation + cost of work dated after it. Work on the same day as a
+    valuation is taken to be included in that valuation. With no valuation, value is NULL and
+    totals fall back to purchase price + all work (see effective_value).
+    """
+    work = q("SELECT date, cost FROM work_log WHERE item_id = ?", (item_id,))
+    work_cost = sum(w["cost"] or 0 for w in work)
+    v = q("SELECT date, value FROM valuations WHERE item_id = ? ORDER BY date DESC, id DESC LIMIT 1",
+          (item_id,), one=True)
+    value = None
+    if v:
+        value = v["value"] + sum(w["cost"] or 0 for w in work if w["date"] > v["date"])
+    ex("UPDATE items SET value = ?, work_cost = ? WHERE id = ?", (value, work_cost, item_id))
+
+
+def add_valuation(item_id, value, date=None, source=None, only_if_changed=False):
+    if value is None:
+        return
+    if only_if_changed:
+        cur = q("SELECT value FROM items WHERE id = ?", (item_id,), one=True)
+        if cur and cur["value"] is not None and abs(cur["value"] - value) < 0.005:
+            return
+    ex("INSERT INTO valuations(item_id, date, value, source) VALUES (?, ?, ?, ?)",
+       (item_id, date or today(), value, source))
+    refresh_value(item_id)
+
+
 OUTCOME_LABELS = dict(PART_OUTCOMES, broken="Broken down further", leave="Still inside donor")
 
 
@@ -418,6 +463,9 @@ def inject():
         "item_label": item_label,
         "label_format": setting("label_format", "qr"),
         "item_qr_url": item_qr_url,
+        "effective_value": effective_value,
+        "cost_basis": cost_basis,
+        "known_cost": known_cost,
         "app_version": APP_VERSION,
         "app_channel": APP_CHANNEL,
     }
@@ -465,7 +513,8 @@ def index():
     stats = q("""SELECT
         SUM(status = 'active') AS active,
         SUM(CASE WHEN status = 'active' THEN quantity ELSE 0 END) AS pieces,
-        SUM(CASE WHEN status = 'active' THEN COALESCE(value, purchase_price, 0) ELSE 0 END) AS value,
+        SUM(CASE WHEN status = 'active' THEN COALESCE(value, COALESCE(purchase_price, 0) + work_cost) ELSE 0 END)
+            AS value,
         SUM(status = 'sold') AS sold,
         SUM(CASE WHEN status = 'sold' THEN COALESCE(disposal_price, 0) ELSE 0 END) AS income,
         SUM(status = 'broken') AS broken
@@ -484,7 +533,7 @@ def items_list():
     status = request.args.get("status", "active")
     loc = int_or_none(request.args.get("location"))
     rows = decorate(search_items(qtext, status, loc))
-    total_value = sum((r["value"] if r["value"] is not None else (r["purchase_price"] or 0)) for r in rows)
+    total_value = sum(effective_value(r) for r in rows)
     return render_template("items.html", rows=rows, qtext=qtext, status=status, loc=loc,
                            locations=location_tree(), total_value=total_value)
 
@@ -496,7 +545,6 @@ def item_form_data(form, existing=None):
         "barcode": clean(form.get("barcode")),
         "description": clean(form.get("description")),
         "notes": clean(form.get("notes")),
-        "value": parse_money(form.get("value")),
         "purchase_date": parse_date(form.get("purchase_date")),
         "purchase_price": parse_money(form.get("purchase_price")),
         "purchase_seller": clean(form.get("purchase_seller")),
@@ -543,7 +591,7 @@ def item_form_data(form, existing=None):
 
 
 ITEM_FIELDS = ["ref", "barcode", "name", "description", "notes", "quantity", "location_id", "parent_id",
-               "harvested_from_id", "status", "value", "purchase_date", "purchase_price", "purchase_seller",
+               "harvested_from_id", "status", "purchase_date", "purchase_price", "purchase_seller",
                "purchase_platform", "disposal_date", "disposal_price", "disposal_destination", "broken_date"]
 
 
@@ -559,6 +607,9 @@ def form_context(item, data=None):
 def item_new():
     if request.method == "POST":
         data, errors = item_form_data(request.form)
+        # New items always start in the collection; status changes happen by editing later.
+        data.update(status="active", disposal_date=None, disposal_price=None,
+                    disposal_destination=None, broken_date=None)
         if errors:
             for e in errors:
                 flash(e, "error")
@@ -603,7 +654,7 @@ def item_new():
     if src:
         s = q("SELECT * FROM items WHERE id = ?", (src,), one=True)
         if s:
-            for k in ("name", "description", "value", "purchase_date", "purchase_price", "purchase_seller",
+            for k in ("name", "description", "purchase_date", "purchase_price", "purchase_seller",
                       "purchase_platform", "location_id"):
                 f[k] = s[k]
             if s["parent_id"]:
@@ -625,12 +676,18 @@ def item_view(item_id):
     donor = q("SELECT * FROM items WHERE id = ?", (item["harvested_from_id"],), one=True) \
         if item["harvested_from_id"] else None
     parts, part_totals = breakdown_summary(item_id)
-    contents_value = sum((c["value"] if c["value"] is not None else (c["purchase_price"] or 0))
-                         for c in contents if c["status"] == "active")
+    contents_value = sum(effective_value(c) for c in contents if c["status"] == "active")
+    valuations = q("SELECT * FROM valuations WHERE item_id = ? ORDER BY date DESC, id DESC", (item_id,))
+    work = q("SELECT * FROM work_log WHERE item_id = ? ORDER BY date DESC, id DESC", (item_id,))
+    latest = valuations[0] if valuations else None
+    work_since = sum(w["cost"] or 0 for w in work if latest and w["date"] > latest["date"])
+    sources = [r["source"] for r in q("SELECT DISTINCT source FROM valuations WHERE source IS NOT NULL "
+                                      "AND source != 'Recorded before value history' ORDER BY 1")]
     return render_template("item_view.html", item=item, ancestors=ancestors, loc_path=loc_path,
                            contents=contents, photos=photos, descriptors=descriptors, donor=donor,
                            parts=parts, part_totals=part_totals, contents_value=contents_value,
-                           shell=shell_value(item))
+                           shell=shell_value(item), valuations=valuations, work=work, latest=latest,
+                           work_since=work_since, sources=sources, today=today())
 
 
 @app.route("/items/<int:item_id>/edit", methods=["GET", "POST"])
@@ -728,6 +785,76 @@ def item_reinstate(item_id):
     return redirect(url_for("item_view", item_id=item_id))
 
 
+# --- valuations & work log -------------------------------------------------
+@app.route("/items/<int:item_id>/valuations", methods=["POST"])
+def valuation_add(item_id):
+    get_item(item_id)
+    value = parse_money(request.form.get("value"))
+    if value is None:
+        flash("Enter a value.", "error")
+    else:
+        add_valuation(item_id, value, parse_date(request.form.get("date")) or today(),
+                      clean(request.form.get("source")))
+        ex("UPDATE items SET updated_at = ? WHERE id = ?", (now(), item_id))
+        commit()
+        flash("Valuation added", "ok")
+    return redirect(url_for("item_view", item_id=item_id) + "#value")
+
+
+@app.route("/valuations/<int:val_id>/delete", methods=["POST"])
+def valuation_delete(val_id):
+    row = q("SELECT * FROM valuations WHERE id = ?", (val_id,), one=True) or abort(404)
+    ex("DELETE FROM valuations WHERE id = ?", (val_id,))
+    refresh_value(row["item_id"])
+    commit()
+    flash("Valuation deleted", "ok")
+    return redirect(url_for("item_view", item_id=row["item_id"]) + "#value")
+
+
+def _work_fields(form):
+    return (parse_date(form.get("date")) or today(), (form.get("description") or "").strip(),
+            parse_money(form.get("cost")))
+
+
+@app.route("/items/<int:item_id>/work", methods=["POST"])
+def work_add(item_id):
+    get_item(item_id)
+    date, desc, cost = _work_fields(request.form)
+    if not desc:
+        flash("Describe the work done.", "error")
+    else:
+        ex("INSERT INTO work_log(item_id, date, description, cost) VALUES (?, ?, ?, ?)", (item_id, date, desc, cost))
+        refresh_value(item_id)
+        ex("UPDATE items SET updated_at = ? WHERE id = ?", (now(), item_id))
+        commit()
+        flash("Log entry added", "ok")
+    return redirect(url_for("item_view", item_id=item_id) + "#work")
+
+
+@app.route("/work/<int:entry_id>/edit", methods=["POST"])
+def work_edit(entry_id):
+    row = q("SELECT * FROM work_log WHERE id = ?", (entry_id,), one=True) or abort(404)
+    date, desc, cost = _work_fields(request.form)
+    if not desc:
+        flash("Describe the work done.", "error")
+    else:
+        ex("UPDATE work_log SET date = ?, description = ?, cost = ? WHERE id = ?", (date, desc, cost, entry_id))
+        refresh_value(row["item_id"])
+        commit()
+        flash("Log entry updated", "ok")
+    return redirect(url_for("item_view", item_id=row["item_id"]) + "#work")
+
+
+@app.route("/work/<int:entry_id>/delete", methods=["POST"])
+def work_delete(entry_id):
+    row = q("SELECT * FROM work_log WHERE id = ?", (entry_id,), one=True) or abort(404)
+    ex("DELETE FROM work_log WHERE id = ?", (entry_id,))
+    refresh_value(row["item_id"])
+    commit()
+    flash("Log entry deleted", "ok")
+    return redirect(url_for("item_view", item_id=row["item_id"]) + "#work")
+
+
 # --- breakdown for spares ---------------------------------------------------
 @app.route("/items/<int:item_id>/breakdown", methods=["GET", "POST"])
 def item_breakdown(item_id):
@@ -770,7 +897,7 @@ def item_breakdown(item_id):
                 ex("UPDATE items SET status = 'broken', broken_date = COALESCE(broken_date, ?), updated_at = ? "
                    "WHERE id = ?", (date, now(), item_id))
             if f.get("donor_value", "").strip() != "":
-                ex("UPDATE items SET value = ? WHERE id = ?", (parse_money(f.get("donor_value")), item_id))
+                add_valuation(item_id, parse_money(f.get("donor_value")), date, "Shell value after breakdown")
             if clean(f.get("notes")):
                 ex("UPDATE items SET notes = COALESCE(notes || char(10), '') || ? WHERE id = ?",
                    (f"[{date}] {f.get('notes').strip()}", item_id))
@@ -778,7 +905,6 @@ def item_breakdown(item_id):
                 val = parse_money(r["value"])
                 fields = {
                     "harvested_from_id": item_id,
-                    "value": val,
                     "parent_id": None,
                     "location_id": None,
                     "status": "active",
@@ -803,11 +929,14 @@ def item_breakdown(item_id):
                            (r["desc"].strip(), existing))
                     ex(f"UPDATE items SET {', '.join(k + ' = ?' for k in fields)} WHERE id = ?",
                        list(fields.values()) + [existing])
+                    part_id = existing
                 else:
                     fields.update(ref=allocate_ref(), name=r["name"].strip(), description=clean(r["desc"]),
                                   created_at=now(), purchase_date=None)
-                    ex(f"INSERT INTO items({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
-                       list(fields.values()))
+                    part_id = ex(f"INSERT INTO items({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
+                                 list(fields.values()))
+                if oc not in ("sold", "given_away", "scrapped"):
+                    add_valuation(part_id, val, date, f"Harvested from {donor['ref']}", only_if_changed=True)
             commit()
             flash(f"Recorded {len(plan)} part(s) from {donor['ref']}", "ok")
             return redirect(url_for("item_view", item_id=item_id))
@@ -1022,7 +1151,7 @@ def lookup():
     if rows:
         return render_template("items.html", rows=decorate([dict(r) for r in rows]), qtext=code, status="all",
                                loc=None, locations=location_tree(),
-                               total_value=sum((r["value"] or 0) for r in rows))
+                               total_value=sum(effective_value(r) for r in rows))
     return render_template("scan.html", not_found=code)
 
 
@@ -1046,7 +1175,7 @@ def location_stats():
         if it["status"] != "active":
             continue
         lid = effective_location_id(it, items)
-        v = it["value"] if it["value"] is not None else (it["purchase_price"] or 0)
+        v = effective_value(it)
         if lid not in loc_by_id:
             lid = None
         if lid is None:
@@ -1166,15 +1295,15 @@ def reports():
     items = {r["id"]: dict(r) for r in q("SELECT * FROM items")}
     loc_by_id, _ = load_locations()
 
-    def val(it):
-        return it["value"] if it["value"] is not None else (it["purchase_price"] or 0)
+    val = effective_value
 
     active = [it for it in items.values() if it["status"] == "active"]
     collection = {
         "count": len(active),
         "pieces": sum(it["quantity"] for it in active),
         "value": sum(val(it) for it in active),
-        "cost": sum(it["purchase_price"] or 0 for it in active),
+        "cost": sum(cost_basis(it) for it in active),
+        "work": sum(it["work_cost"] or 0 for it in active),
         "top_level": sum(1 for it in active if not it["parent_id"]),
         "spares": sum(1 for it in active if it["harvested_from_id"] and not it["parent_id"]),
     }
@@ -1202,14 +1331,14 @@ def reports():
     sales = {
         "count": len(sold),
         "income": sum(it["disposal_price"] or 0 for it in sold),
-        "cost": sum(it["purchase_price"] or 0 for it in sold),
+        "cost": sum(cost_basis(it) for it in sold),
         "whole_count": sum(1 for it in sold if not it["harvested_from_id"]),
         "whole_income": sum(it["disposal_price"] or 0 for it in sold if not it["harvested_from_id"]),
         "parts_count": sum(1 for it in sold if it["harvested_from_id"]),
         "parts_income": sum(it["disposal_price"] or 0 for it in sold if it["harvested_from_id"]),
     }
     # Profit on whole items; shells of broken-down items are accounted for under breakdowns instead.
-    sales["profit"] = sum((it["disposal_price"] or 0) - (it["purchase_price"] or 0) for it in sold
+    sales["profit"] = sum((it["disposal_price"] or 0) - cost_basis(it) for it in sold
                           if not it["harvested_from_id"] and not it["broken_date"])
 
     broken = sorted([it for it in items.values() if it["broken_date"] and in_range(it["broken_date"], start, end)],
@@ -1220,10 +1349,11 @@ def reports():
         b["nparts"] = len(rows)
         b["totals"] = totals
         b["shell"] = shell_value(b)
-        b["net"] = totals["recovered"] + b["shell"] - (b["purchase_price"] or 0)
+        b["cost"] = cost_basis(b)
+        b["net"] = totals["recovered"] + b["shell"] - b["cost"]
         for k in ("sold", "repair", "spare", "broken", "recovered"):
             bt[k] += totals[k]
-        bt["cost"] += b["purchase_price"] or 0
+        bt["cost"] += b["cost"]
         bt["shell"] += b["shell"]
         bt["parts"] += len(rows)
     bt["net"] = bt["recovered"] + bt["shell"] - bt["cost"]
@@ -1231,6 +1361,10 @@ def reports():
     # Purchases in range
     bought = [it for it in items.values() if it["purchase_date"] and in_range(it["purchase_date"], start, end)]
     purchases = {"count": len(bought), "spent": sum(it["purchase_price"] or 0 for it in bought)}
+    # Work done in range (by the date of each log entry)
+    wrows = [r for r in q("SELECT date, cost FROM work_log") if in_range(r["date"], start, end)]
+    purchases["work_count"] = len(wrows)
+    purchases["work_spent"] = sum(r["cost"] or 0 for r in wrows)
 
     years = sorted({d[:4] for it in items.values()
                     for d in (it["purchase_date"], it["disposal_date"], it["broken_date"]) if d}, reverse=True)
@@ -1252,7 +1386,7 @@ def export_csv():
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["ref", "name", "status", "barcode", "quantity", "location", "inside", "harvested_from", "value",
-                "purchase_date", "purchase_price", "seller", "platform", "disposal_date", "disposal_price",
+                "work_cost", "purchase_date", "purchase_price", "seller", "platform", "disposal_date", "disposal_price",
                 "destination", "broken_date", "description", "notes"] + [dt["name"] for dt in dts])
     for it in items.values():
         loc = " / ".join(l["name"] for l in location_path(effective_location_id(it, items), loc_by_id))
@@ -1260,7 +1394,7 @@ def export_csv():
         donor = items.get(it["harvested_from_id"])
         w.writerow([it["ref"], it["name"], it["status"], it["barcode"], it["quantity"], loc,
                     parent["ref"] if parent else "", donor["ref"] if donor else "", it["value"],
-                    it["purchase_date"], it["purchase_price"], it["purchase_seller"], it["purchase_platform"],
+                    it["work_cost"] or "", it["purchase_date"], it["purchase_price"], it["purchase_seller"], it["purchase_platform"],
                     it["disposal_date"], it["disposal_price"], it["disposal_destination"], it["broken_date"],
                     it["description"], it["notes"]] + [desc[it["id"]].get(dt["id"], "") for dt in dts])
     return Response(buf.getvalue(), mimetype="text/csv",

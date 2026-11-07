@@ -11,10 +11,10 @@
   <div class="stat"><b>{{ collection.count }}</b><span>items ({{ collection.pieces }} pieces)</span></div>
   <div class="stat"><b>{{ collection.top_level }}</b><span>top-level items</span></div>
   <div class="stat"><b>{{ collection.value|money }}</b><span>current value</span></div>
-  <div class="stat"><b>{{ collection.cost|money }}</b><span>paid for them</span></div>
+  <div class="stat"><b>{{ collection.cost|money }}</b><span>spent on them{% if collection.work %} (incl. {{ collection.work|money }} work){% endif %}</span></div>
   <div class="stat"><b>{{ collection.spares }}</b><span>harvested spares on the shelf</span></div>
 </section>
-<p class="hint">Value uses each item's "current value", falling back to its purchase price. Parts inside an item are counted separately, so record a computer's value excluding parts you've listed inside it.</p>
+<p class="hint">Value uses each item's latest valuation plus any work logged after it. Items never valued count at what they've cost (purchase + work). Parts inside an item are counted separately, so record a computer's value excluding parts you've listed inside it.</p>
 
 <div class="two">
 <section>
@@ -72,6 +72,7 @@
 
 <section class="stats">
   <div class="stat"><b>{{ purchases.count }}</b><span>bought · {{ purchases.spent|money }}</span></div>
+  <div class="stat"><b>{{ purchases.work_count }}</b><span>work log entries · {{ purchases.work_spent|money }}</span></div>
   <div class="stat"><b>{{ sales.count }}</b><span>sold · {{ sales.income|money }} income</span></div>
   <div class="stat"><b>{{ given|length }}</b><span>given away</span></div>
   <div class="stat"><b>{{ broken|length }}</b><span>broken for spares · {{ bt.parts|int }} parts</span></div>
@@ -83,19 +84,19 @@
   <tr><td>Whole items sold ({{ sales.whole_count }})</td><td>{{ sales.whole_income|money }}</td></tr>
   <tr><td>Harvested parts sold ({{ sales.parts_count }})</td><td>{{ sales.parts_income|money }}</td></tr>
   <tr class="net"><td>Total income</td><td>{{ sales.income|money }}</td></tr>
-  <tr><td>Profit on whole items (sale − purchase)</td><td class="{{ 'pos' if sales.profit >= 0 else 'neg' }}">{{ sales.profit|money }}</td></tr>
+  <tr><td>Profit on whole items (sale − purchase − work)</td><td class="{{ 'pos' if sales.profit >= 0 else 'neg' }}">{{ sales.profit|money }}</td></tr>
 </table>
 {% if sold %}
 <div class="tablewrap">
 <table class="data">
-  <thead><tr><th>Date</th><th>Item</th><th>To</th><th class="num">Paid</th><th class="num">Sold for</th></tr></thead>
+  <thead><tr><th>Date</th><th>Item</th><th>To</th><th class="num">Cost</th><th class="num">Sold for</th></tr></thead>
   <tbody>
   {% for it in sold %}
     <tr><td>{{ it.disposal_date or '' }}</td>
       <td><a href="{{ url_for('item_view', item_id=it.id) }}"><code class="ref">{{ it.ref }}</code> {{ it.name }}</a>
         {% if it.donor %}<div class="muted small">part from {{ it.donor.ref }} {{ it.donor.name }}</div>{% endif %}</td>
       <td>{{ it.disposal_destination or '' }}</td>
-      <td class="num">{{ it.purchase_price|money('') }}</td>
+      <td class="num">{{ known_cost(it)|money('') }}</td>
       <td class="num">{{ it.disposal_price|money }}</td></tr>
   {% endfor %}
   </tbody>
@@ -105,7 +106,7 @@
 
 <h3>Broken for spares</h3>
 <table class="totals">
-  <tr><td>Paid for donor items</td><td>{{ bt.cost|money }}</td></tr>
+  <tr><td>Donor items cost (purchase + work)</td><td>{{ bt.cost|money }}</td></tr>
   <tr><td>Parts sold separately</td><td>{{ bt.sold|money }}</td></tr>
   <tr><td>Parts used to repair other items</td><td>{{ bt.repair|money }}</td></tr>
   <tr><td>Parts kept as spares</td><td>{{ (bt.spare + bt.broken)|money }}</td></tr>
@@ -115,13 +116,13 @@
 {% if broken %}
 <div class="tablewrap">
 <table class="data">
-  <thead><tr><th>Date</th><th>Donor</th><th class="num">Parts</th><th class="num">Paid</th><th class="num">Sold</th><th class="num">Repairs</th><th class="num">Spares</th><th class="num">Net</th></tr></thead>
+  <thead><tr><th>Date</th><th>Donor</th><th class="num">Parts</th><th class="num">Cost</th><th class="num">Sold</th><th class="num">Repairs</th><th class="num">Spares</th><th class="num">Net</th></tr></thead>
   <tbody>
   {% for b in broken %}
     <tr><td>{{ b.broken_date or '' }}</td>
       <td><a href="{{ url_for('item_view', item_id=b.id) }}"><code class="ref">{{ b.ref }}</code> {{ b.name }}</a></td>
       <td class="num">{{ b.nparts }}</td>
-      <td class="num">{{ b.purchase_price|money('') }}</td>
+      <td class="num">{{ b.cost|money('') }}</td>
       <td class="num">{{ b.totals.sold|money }}</td>
       <td class="num">{{ b.totals.repair|money }}</td>
       <td class="num">{{ (b.totals.spare + b.totals.broken)|money }}</td>
@@ -136,11 +137,11 @@
 <h3>Given away</h3>
 <div class="tablewrap">
 <table class="data">
-  <thead><tr><th>Date</th><th>Item</th><th>To</th><th class="num">Paid</th></tr></thead>
+  <thead><tr><th>Date</th><th>Item</th><th>To</th><th class="num">Cost</th></tr></thead>
   <tbody>
   {% for it in given %}
     <tr><td>{{ it.disposal_date or '' }}</td><td><a href="{{ url_for('item_view', item_id=it.id) }}"><code class="ref">{{ it.ref }}</code> {{ it.name }}</a></td>
-      <td>{{ it.disposal_destination or '' }}</td><td class="num">{{ it.purchase_price|money('') }}</td></tr>
+      <td>{{ it.disposal_destination or '' }}</td><td class="num">{{ known_cost(it)|money('') }}</td></tr>
   {% endfor %}
   </tbody>
 </table>

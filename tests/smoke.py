@@ -33,12 +33,12 @@ r = post("/items/new", {"name": "Amiga 500", "location_id": "3", "desc_1": "Comm
                          "purchase_seller": "Bob", "purchase_platform": "eBay", "barcode": "5012345678900",
                          "photos": (img, "a500.jpg")}, content_type="multipart/form-data")
 a500 = item_id_from(r); assert b"RC-00001" in r.data
-r = post("/items/new", {"name": "A501 RAM expansion", "parent": "RC-00001", "value": "25"})
+r = post("/items/new", {"name": "A501 RAM expansion", "parent": "RC-00001"})
 a501 = item_id_from(r); assert b"Amiga 500" in r.data
 r = post("/items/new", {"name": "Amiga 1200 (dead)", "location_id": "4", "purchase_price": "80",
                          "purchase_date": "2025-06-01", "desc_1": "Commodore"})
 a1200 = item_id_from(r)
-r = post("/items/new", {"name": "Gayle chip", "parent": f"RC-00003 — Amiga 1200 (dead)", "value": "15"})
+r = post("/items/new", {"name": "Gayle chip", "parent": f"RC-00003 — Amiga 1200 (dead)"})
 gayle = item_id_from(r)
 r = post("/items/new", {"name": "Amiga 1200 (working)", "location_id": "3", "purchase_price": "150"})
 a1200w = item_id_from(r)
@@ -127,5 +127,71 @@ r = ok(c.get(f"/items/{gayle}")); assert b"Loft" in r.data
 
 # reinstate
 post(f"/items/{a500}/reinstate", {})
+
+# --- new item form: no status/value fields; status forced active ---------------
+html = ok(c.get("/items/new")).data.decode()
+assert 'name="value"' not in html and 'name="disposal_date"' not in html
+r = post("/items/new", {"name": "Sneaky", "status": "sold", "disposal_price": "9"})
+sneaky = item_id_from(r)
+from app import app as _app
+from db import q as _q
+with _app.app_context():
+    row = _q("SELECT status, disposal_price FROM items WHERE id = ?", (sneaky,), one=True)
+    assert row["status"] == "active" and row["disposal_price"] is None
+
+# --- breakdown values became valuations -----------------------------------------
+with _app.app_context():
+    v = _q("SELECT * FROM valuations WHERE item_id = ?", (a1200,))
+    assert len(v) == 1 and v[0]["value"] == 5 and v[0]["source"] == "Shell value after breakdown"
+    assert _q("SELECT value FROM items WHERE id = ?", (gayle,), one=True)["value"] == 15
+
+# --- work log and valuations -----------------------------------------------------
+r = post("/items/new", {"name": "Amiga 600", "purchase_price": "100", "purchase_date": "2025-01-01"})
+a600 = item_id_from(r)
+def val600():
+    with _app.app_context():
+        return dict(_q("SELECT value, work_cost FROM items WHERE id = ?", (a600,), one=True))
+post(f"/items/{a600}/work", {"date": "2025-02-01", "description": "Recapped", "cost": "20"})
+post(f"/items/{a600}/work", {"date": "2025-03-01", "description": "Cleaned keyboard", "cost": ""})
+assert val600() == {"value": None, "work_cost": 20}          # not valued: totals use cost 120
+html = ok(c.get(f"/items/{a600}")).data.decode()
+assert "Recapped" in html and "£120.00" in html and "not valued yet" in html
+post(f"/items/{a600}/valuations", {"date": "2025-04-01", "value": "150", "source": "eBay sold"})
+post(f"/items/{a600}/valuations", {"date": "2025-03-15", "value": "130", "source": "older"})
+assert val600()["value"] == 150                               # latest by date wins
+post(f"/items/{a600}/work", {"date": "2025-05-01", "description": "New RF shield", "cost": "12.50"})
+assert val600() == {"value": 162.5, "work_cost": 32.5}       # work after valuation adds on
+post(f"/items/{a600}/work", {"date": "2025-04-01", "description": "Same day as valuation", "cost": "5"})
+assert val600()["value"] == 162.5                             # same-day work assumed included
+with _app.app_context():
+    wid = _q("SELECT id FROM work_log WHERE description = 'New RF shield'", one=True)["id"]
+    vid = _q("SELECT id FROM valuations WHERE value = 150", one=True)["id"]
+post(f"/work/{wid}/edit", {"date": "2025-05-01", "description": "New RF shield", "cost": "10"})
+assert val600()["value"] == 160
+post(f"/valuations/{vid}/delete", {})
+assert val600()["value"] == 130 + 10 + 5                      # back to older valuation + work after it
+post(f"/work/{wid}/delete", {})
+assert val600() == {"value": 135, "work_cost": 25}
+html = ok(c.get(f"/items/{a600}")).data.decode()
+assert "Work log" in html and "Valuations" in html and "Total" in html
+# reports include work in cost and profit
+post(f"/items/{a600}/dispose", {"kind": "sold", "price": "200", "date": "2025-06-01"})
+html = ok(c.get(f"/items/{a600}")).data.decode()
+assert "profit £75.00" in html                                # 200 - (100 + 25)
+ok(c.get("/reports")); ok(c.get("/reports?year=2025")); ok(c.get("/")); ok(c.get("/locations")); ok(c.get("/items"))
+
+# --- migration of an old database with plain values --------------------------------
+import sqlite3, db as _db
+old = os.path.join(tempfile.mkdtemp(), "old.db")
+conn = sqlite3.connect(old)
+conn.executescript(_db.SCHEMA.split("-- Valuation history")[0].replace("    work_cost            REAL NOT NULL DEFAULT 0,\n", ""))
+conn.execute("INSERT INTO items(ref, name, value, updated_at) VALUES ('X-1', 'Old', 42, '2024-05-06 10:00:00')")
+conn.commit(); conn.close()
+_db.init_db(old); _db.init_db(old)                             # twice: must be idempotent
+conn = sqlite3.connect(old)
+assert conn.execute("SELECT date, value FROM valuations").fetchall() == [("2024-05-06", 42.0)]
+assert conn.execute("SELECT value, work_cost FROM items").fetchone() == (42.0, 0)
+conn.close()
+
 print("CSV:\n" + c.get("/export/items.csv").data.decode()[:600])
 print("ALL OK", tmp)

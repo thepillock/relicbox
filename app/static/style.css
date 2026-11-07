@@ -120,6 +120,8 @@ legend { font-weight: 700; padding: 0 .3rem; }
 .grid label, .stack > label { display: flex; flex-direction: column; gap: .25rem; font-size: .88rem; color: var(--muted); }
 .grid label input, .grid label select, .grid label textarea { font-size: 1rem; color: var(--ink); }
 .grid .wide { grid-column: 1 / -1; }
+textarea.full { display: block; width: 100%; box-sizing: border-box; resize: vertical; }
+.opt { font-weight: normal; opacity: .75; }
 .with-btn { display: flex; gap: .3rem; }
 .with-btn input { flex: 1; }
 label.check { display: flex; flex-direction: row; align-items: center; gap: .4rem; margin-top: .7rem; color: var(--ink); }
@@ -225,3 +227,21 @@ form.rename input { flex: 1; }
 .label.qr img { height: 100%; width: auto; aspect-ratio: 1; flex: none; }
 .label.qr .l-text { display: flex; flex-direction: column; min-width: 0; text-align: left; }
 .label.qr .l-name { text-align: left; max-height: 3.5em; }
+
+/* work log & valuations */
+.log { list-style: none; padding: 0; margin: 0 0 .8rem; display: flex; flex-direction: column; gap: .5rem; }
+.log li { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: .6rem .8rem; }
+.log-head { display: flex; justify-content: space-between; gap: 1rem; font-size: .88rem; color: var(--muted); }
+.log-cost { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+.log-text { white-space: pre-wrap; margin-top: .2rem; }
+.log-edit { margin-top: .3rem; font-size: .88rem; }
+.log-edit summary { cursor: pointer; color: var(--muted); }
+.log-edit form { margin-top: .5rem; }
+.addbox > summary { list-style: none; display: inline-block; cursor: pointer; }
+.addbox > summary::-webkit-details-marker { display: none; }
+.addbox[open] > summary { margin-bottom: .6rem; }
+.addbox form { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: .8rem 1rem; }
+label.stacked textarea { font-size: 1rem; color: var(--ink); }
+table.data tr.current td { font-weight: 600; }
+.tablewrap + .addbox { margin-top: .6rem; }
+#work, #value { margin-bottom: 1.5rem; }

@@ -11,15 +11,16 @@
     <legend>Item</legend>
     <div class="grid">
       <label class="wide">Name *<input name="name" required value="{{ f.name or '' }}" autocomplete="off"></label>
-      <label>Reference<input name="ref" value="{{ f.ref or '' }}" placeholder="auto" autocomplete="off" class="mono"></label>
-      <label>Barcode
-        <span class="with-btn"><input name="barcode" id="barcode" value="{{ f.barcode or '' }}" autocomplete="off" class="mono">
+      <label>Reference<input name="ref" value="{{ f.ref or '' }}" placeholder="{{ 'auto' if not item else '' }}" autocomplete="off" class="mono"></label>
+      <label><span>Product barcode <span class="opt">(optional)</span></span>
+        <span class="with-btn"><input name="barcode" id="barcode" value="{{ f.barcode or '' }}" autocomplete="off" class="mono" placeholder="usually blank">
         <button type="button" class="btn small" data-scan-into="barcode">Scan</button></span>
       </label>
       <label>Quantity<input name="quantity" type="number" min="1" value="{{ f.quantity or 1 }}"></label>
-      <label>Current value ({{ currency }})<input name="value" inputmode="decimal" value="{{ f.value|num if f.value is not none else '' }}" placeholder="for reports"></label>
       <label class="wide">Description<textarea name="description" rows="3">{{ f.description or '' }}</textarea></label>
     </div>
+    <p class="hint"><b>Reference</b> is RelicBox's own number for the item and is what goes on the labels you print. Leave it blank and the next number is used.
+      <b>Product barcode</b> is only for a barcode the item already came with, such as the EAN on a boxed game, so scanning the box finds it. Most items won't have one, so leave it empty.</p>
   </fieldset>
 
   <fieldset>
@@ -63,9 +64,10 @@
 
   <fieldset>
     <legend>Notes</legend>
-    <textarea name="notes" rows="4">{{ f.notes or '' }}</textarea>
+    <textarea name="notes" rows="4" class="full">{{ f.notes or '' }}</textarea>
   </fieldset>
 
+  {% if item %}
   <details {{ 'open' if (f.status and f.status != 'active') or f.harvested_from }}>
     <summary>Status, disposal &amp; provenance</summary>
     <fieldset>
@@ -81,6 +83,7 @@
       </div>
     </fieldset>
   </details>
+  {% endif %}
 
   <div class="formbar">
     <button class="btn primary">Save</button>

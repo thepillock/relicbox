@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS items (
     disposal_price       REAL,
     disposal_destination TEXT,
     broken_date          TEXT,
+    work_cost            REAL NOT NULL DEFAULT 0,
     created_at           TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at           TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -68,10 +69,32 @@ CREATE TABLE IF NOT EXISTS photos (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_photos_item ON photos(item_id);
+
+-- Valuation history. items.value caches the current value worked out from this (see refresh_value).
+CREATE TABLE IF NOT EXISTS valuations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    date       TEXT NOT NULL,
+    value      REAL NOT NULL,
+    source     TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_valuations_item ON valuations(item_id, date);
+
+-- Repairs and other work done on an item. items.work_cost caches the total cost.
+CREATE TABLE IF NOT EXISTS work_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id     INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    date        TEXT NOT NULL,
+    description TEXT NOT NULL,
+    cost        REAL,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_work_log_item ON work_log(item_id, date);
 """
 
 DEFAULT_SETTINGS = {
-    "schema_version": "2",
+    "schema_version": "3",
     "label_format": "qr",
     "public_url": "",
     "ref_prefix": "RC-",
@@ -116,7 +139,15 @@ def migrate(conn):
         if "legacy_id" not in _columns(conn, table):
             conn.execute(f"ALTER TABLE {table} ADD COLUMN legacy_id TEXT")
         conn.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_legacy ON {table}(legacy_id)")
-    conn.execute("UPDATE settings SET value = '2' WHERE key = 'schema_version'")
+    if "work_cost" not in _columns(conn, "items"):
+        conn.execute("ALTER TABLE items ADD COLUMN work_cost REAL NOT NULL DEFAULT 0")
+    # v3: values become a dated history. Keep any single value recorded before that as the first valuation.
+    conn.execute("""INSERT INTO valuations(item_id, date, value, source)
+                    SELECT id, substr(COALESCE(updated_at, created_at, date('now')), 1, 10), value,
+                           'Recorded before value history'
+                    FROM items i
+                    WHERE value IS NOT NULL AND NOT EXISTS (SELECT 1 FROM valuations v WHERE v.item_id = i.id)""")
+    conn.execute("UPDATE settings SET value = '3' WHERE key = 'schema_version'")
 
 
 def get_db():

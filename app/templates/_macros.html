@@ -27,7 +27,7 @@
       {% if show_where %}<div class="card-where">{{ where(r) }}</div>{% endif %}
     </div>
     <div class="card-value">
-      {% if r.status == 'sold' %}{{ r.disposal_price|money }}{% else %}{{ (r.value if r.value is not none else r.purchase_price)|money('') }}{% endif %}
+      {% if r.status == 'sold' %}{{ r.disposal_price|money }}{% else %}{{ (r.value if r.value is not none else known_cost(r))|money('') }}{% endif %}
     </div>
   </li>
 {% else %}
