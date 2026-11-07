@@ -3,6 +3,7 @@
 {% block title %}{{ item.name }}{% endblock %}
 {% block body %}
 <nav class="crumbs">
+  {% if item.status in DISPOSED and not ancestors %}<a href="{{ url_for('items_list', status='gone') }}">Sold</a> › {% endif %}
   {% for l in loc_path %}<a href="{{ url_for('location_view', loc_id=l.id) }}">{{ l.name }}</a> › {% endfor %}
   {% for a in ancestors %}<a href="{{ url_for('item_view', item_id=a.id) }}">{{ a.name }}</a> › {% endfor %}
   <span>{{ item.name }}</span>
@@ -20,7 +21,6 @@
       <a class="btn" href="{{ url_for('item_breakdown', item_id=item.id) }}">Breaking for spares</a>
       {% if item.harvested_from_id %}<a class="btn" href="{{ url_for('item_fit', item_id=item.id) }}">Fit into another item</a>{% endif %}
     {% elif item.status == 'broken' %}
-      <a class="btn" href="{{ url_for('item_breakdown', item_id=item.id) }}">Record more parts</a>
       <a class="btn" href="{{ url_for('item_dispose', item_id=item.id, kind='scrapped') }}">Finished: dispose of shell</a>
     {% endif %}
     {% if item.status != 'active' %}
@@ -51,7 +51,7 @@
     <h3>Spend</h3>
     <table class="totals">
       <tr><td>Purchase</td><td>{{ item.purchase_price|money }}</td></tr>
-      <tr><td><a href="#work">Work done</a>{% if work %} ({{ work|length }} entr{{ 'y' if work|length == 1 else 'ies' }}){% endif %}</td><td>{{ item.work_cost|money }}</td></tr>
+      <tr><td>{% if work %}<a href="#work">Work done</a>{% else %}Work done{% endif %}{% if work %} ({{ work|length }} entr{{ 'y' if work|length == 1 else 'ies' }}){% endif %}</td><td>{{ item.work_cost|money }}</td></tr>
       <tr class="net"><td>Total spent</td><td>{{ cost_basis(item)|money }}</td></tr>
       {% if item.broken_date %}
       <tr><td><a href="#parts">Income from parts</a> ({{ parts|length }})</td><td>{{ (part_totals.income - part_totals.shell)|money }}</td></tr>
@@ -69,16 +69,22 @@
     {% if item.broken_date and not part_totals.finished %}<p class="hint">Breaking for spares: income builds up as parts are sold or fitted. Use “Finished: dispose of shell” when nothing more will come off it.</p>{% endif %}
     {% if item.harvested_from_id %}<p class="hint">Spend on this part is part of its donor's cost. What it brings in counts as the donor's income.</p>{% endif %}
 
+    {% if not item.broken_date and (latest or item.status == 'active') %}
     <p class="valline"><span class="muted">Valuation</span>
       {% if latest %}<b>{{ latest.value|money }}</b> <span class="muted small">{{ latest.date }}{% if latest.source %} · {{ latest.source }}{% endif %}</span>
-      {% else %}<span class="muted">none recorded</span>{% endif %}
-      · <a class="small" href="#value">{{ 'History' if latest else 'Add one' }}</a></p>
+      · <a class="small" href="#value">History</a>
+      {% elif item.status == 'active' %}<span class="muted">none recorded</span> · <a class="small" href="#value" data-add-for="value">Add one</a>
+      {% endif %}</p>
+    {% endif %}
 
     {% if item.status in ('sold', 'given_away', 'scrapped') %}
     <h3>{{ STATUSES[item.status] }}</h3>
     <dl class="facts">
       <dt>Date</dt><dd>{{ item.disposal_date or '—' }}</dd>
       {% if item.disposal_destination %}<dt>To</dt><dd>{{ item.disposal_destination }}</dd>{% endif %}
+      {% if was_in or was_path %}<dt>Was in</dt><dd>
+        {%- for l in was_path %}{{ ' › ' if not loop.first }}<a href="{{ url_for('location_view', loc_id=l.id) }}">{{ l.name }}</a>{% endfor %}
+        {%- if was_in %}{{ ' › ' if was_path }}<a href="{{ url_for('item_view', item_id=was_in.id) }}">{{ was_in.name }}</a>{% endif %}</dd>{% endif %}
     </dl>
     {% endif %}
 
@@ -110,78 +116,152 @@
   </div>
 </div>
 
-<section id="work">
-  <h2>Work log <small class="muted">{{ work|length }}{% if item.work_cost %} · {{ item.work_cost|money }}{% endif %}</small></h2>
-  {% if work %}
-  <ul class="log">
-    {% for w in work %}
-    <li>
-      <div class="log-head"><span class="log-date">{{ w.date }}</span>{% if w.cost is not none %}<span class="log-cost">{{ w.cost|money }}</span>{% endif %}</div>
-      <div class="log-text">{{ w.description }}{% if w.part_id %} <a class="small" href="{{ url_for('item_view', item_id=w.part_id) }}">view part</a>{% endif %}</div>
-      <details class="log-edit">
-        <summary>Edit</summary>
-        <form method="post" action="{{ url_for('work_edit', entry_id=w.id) }}" class="stack">
-          <div class="grid">
-            <label>Date<input type="date" name="date" value="{{ w.date }}" required></label>
-            <label>Cost ({{ currency }})<input name="cost" inputmode="decimal" value="{{ w.cost|num }}"></label>
-          </div>
-          <textarea name="description" rows="3" class="full" required>{{ w.description }}</textarea>
-          <div class="formbar"><button class="btn small primary">Save</button></div>
-        </form>
-        <form method="post" action="{{ url_for('work_delete', entry_id=w.id) }}" class="inline" data-confirm="Delete this log entry?"><button class="link danger">Delete entry</button></form>
-      </details>
-    </li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-  <details class="addbox" {{ 'open' if not work }}>
-    <summary class="btn small">+ Add log entry</summary>
-    <form method="post" action="{{ url_for('work_add', item_id=item.id) }}" class="stack">
-      <div class="grid">
-        <label>Date<input type="date" name="date" value="{{ today }}" required></label>
-        <label>Cost ({{ currency }})<input name="cost" inputmode="decimal" placeholder="parts, postage, tools…"></label>
-      </div>
-      <label class="stacked">What was done<textarea name="description" rows="3" class="full" required placeholder="e.g. Replaced leaking caps C12–C15, recapped PSU"></textarea></label>
-      <div class="formbar"><button class="btn primary small">Add entry</button></div>
-    </form>
-  </details>
-  <p class="hint">Costs here are added to the item's total spend.</p>
-</section>
-
-<section id="value">
-  <h2>Valuations <small class="muted">{{ valuations|length }}</small></h2>
-  {% if valuations %}
-  <div class="tablewrap">
-  <table class="data">
-    <thead><tr><th>Date</th><th>Source</th><th class="num">Value</th><th></th></tr></thead>
+{% set is_donor = item.broken_date %}
+{% set can_log = item.status == 'active' and not is_donor %}
+{% if work or can_log %}
+<section id="work" class="ledger-section">
+  <div class="ledger-head">
+    <h2>Work log{% if work %} <small class="muted">{{ work|length }} · {{ item.work_cost|money }}</small>{% endif %}</h2>
+    {% if can_log %}<button type="button" class="btn small" data-add>+ Add work</button>{% endif %}
+  </div>
+  <form id="work-new" method="post" action="{{ url_for('work_add', item_id=item.id) }}"></form>
+  {% for w in work %}
+  <form id="work-edit-{{ w.id }}" method="post" action="{{ url_for('work_edit', entry_id=w.id) }}"></form>
+  <form id="work-del-{{ w.id }}" method="post" action="{{ url_for('work_delete', entry_id=w.id) }}" data-confirm="Delete this log entry?"></form>
+  {% endfor %}
+  <div class="tablewrap" {{ 'hidden' if not work }}>
+  <table class="data ledger">
+    <thead><tr><th class="c-date">Date</th><th>Work done</th><th class="num c-amt">Cost</th><th class="c-act"></th></tr></thead>
     <tbody>
-    {% for v in valuations %}
-      <tr{% if loop.first %} class="current"{% endif %}><td>{{ v.date }}</td><td>{{ v.source or '' }}</td><td class="num">{{ v.value|money }}</td>
-        <td class="num"><form method="post" action="{{ url_for('valuation_delete', val_id=v.id) }}" class="inline" data-confirm="Delete this valuation?"><button class="link danger">Delete</button></form></td></tr>
-    {% endfor %}
+      <tr class="new-row" hidden>
+        <td><input form="work-new" type="date" name="date" value="{{ today }}" required aria-label="Date"></td>
+        <td class="span2"><input form="work-new" name="description" required placeholder="What was done, e.g. recapped PSU" aria-label="What was done"></td>
+        <td><input form="work-new" name="cost" inputmode="decimal" placeholder="{{ currency }} cost" aria-label="Cost"></td>
+        <td class="row-actions"><button form="work-new" class="btn small primary">Save</button> <button type="button" class="link" data-cancel>Cancel</button></td>
+      </tr>
+      {% for w in work %}
+      <tr class="view-row">
+        <td class="nowrap">{{ w.date }}</td>
+        <td class="wrap">{{ w.description }}{% if w.part_id %} <a class="small" href="{{ url_for('item_view', item_id=w.part_id) }}">view part</a>{% endif %}</td>
+        <td class="num">{{ w.cost|money('') }}</td>
+        <td class="row-actions"><button type="button" class="link" data-edit>Edit</button></td>
+      </tr>
+      <tr class="edit-row" hidden>
+        <td><input form="work-edit-{{ w.id }}" type="date" name="date" value="{{ w.date }}" required aria-label="Date"></td>
+        <td class="span2"><input form="work-edit-{{ w.id }}" name="description" value="{{ w.description }}" required aria-label="What was done"></td>
+        <td><input form="work-edit-{{ w.id }}" name="cost" inputmode="decimal" value="{{ w.cost|num }}" placeholder="{{ currency }} cost" aria-label="Cost"></td>
+        <td class="row-actions"><button form="work-edit-{{ w.id }}" class="btn small primary">Save</button>
+          <button type="button" class="link" data-cancel>Cancel</button>
+          <button form="work-del-{{ w.id }}" class="link danger">Delete</button></td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
   </div>
-  {% endif %}
-  <details class="addbox" {{ 'open' if not valuations }}>
-    <summary class="btn small">+ Add valuation</summary>
-    <form method="post" action="{{ url_for('valuation_add', item_id=item.id) }}" class="stack">
-      <div class="grid">
-        <label>Date<input type="date" name="date" value="{{ today }}" required></label>
-        <label>Value ({{ currency }})<input name="value" inputmode="decimal" required></label>
-        <label>Source<input name="source" list="val-sources" placeholder="eBay sold listings, dealer quote…" autocomplete="off"></label>
-      </div>
-      <datalist id="val-sources">{% for s in sources %}<option value="{{ s }}">{% endfor %}</datalist>
-      <div class="formbar"><button class="btn primary small">Add valuation</button></div>
-    </form>
-  </details>
-  <p class="hint">Valuations are a record of what the item is worth (e.g. for insurance). They don't affect spend or profit. Value it without the parts listed inside it, as those are valued separately.</p>
 </section>
+{% endif %}
 
-{% if item.broken_date or parts %}
-<section id="parts">
-  <h2>Parts taken off{% if item.broken_date %} <small class="muted">breaking since {{ item.broken_date }}{{ ' · finished' if part_totals.finished }}</small>{% endif %}</h2>
-  {% include '_parts_table.html' %}
+{% set can_value = item.status == 'active' and not is_donor %}
+{% if valuations or can_value %}
+<section id="value" class="ledger-section">
+  <div class="ledger-head">
+    <h2>Valuations{% if latest %} <small class="muted">latest {{ latest.value|money }}</small>{% endif %}</h2>
+    {% if can_value %}<button type="button" class="btn small" data-add>+ Add valuation</button>{% endif %}
+  </div>
+  <form id="val-new" method="post" action="{{ url_for('valuation_add', item_id=item.id) }}"></form>
+  {% for v in valuations %}
+  <form id="val-edit-{{ v.id }}" method="post" action="{{ url_for('valuation_edit', val_id=v.id) }}"></form>
+  <form id="val-del-{{ v.id }}" method="post" action="{{ url_for('valuation_delete', val_id=v.id) }}" data-confirm="Delete this valuation?"></form>
+  {% endfor %}
+  <datalist id="val-sources">{% for s in sources %}<option value="{{ s }}">{% endfor %}</datalist>
+  <div class="tablewrap" {{ 'hidden' if not valuations }}>
+  <table class="data ledger">
+    <thead><tr><th class="c-date">Date</th><th class="num c-amt">Value</th><th>Source</th><th class="c-act"></th></tr></thead>
+    <tbody>
+      <tr class="new-row" hidden>
+        <td><input form="val-new" type="date" name="date" value="{{ today }}" required aria-label="Date"></td>
+        <td><input form="val-new" name="value" inputmode="decimal" required placeholder="{{ currency }} value" aria-label="Value"></td>
+        <td class="span2"><input form="val-new" name="source" list="val-sources" autocomplete="off" placeholder="e.g. eBay sold listings" aria-label="Source"></td>
+        <td class="row-actions"><button form="val-new" class="btn small primary">Save</button> <button type="button" class="link" data-cancel>Cancel</button></td>
+      </tr>
+      {% for v in valuations %}
+      <tr class="view-row{{ ' current' if loop.first }}">
+        <td class="nowrap">{{ v.date }}</td>
+        <td class="num">{{ v.value|money }}</td>
+        <td class="wrap">{{ v.source or '' }}</td>
+        <td class="row-actions">{% if can_value %}<button type="button" class="link" data-edit>Edit</button>{% else %}<button form="val-del-{{ v.id }}" class="link danger">Delete</button>{% endif %}</td>
+      </tr>
+      {% if can_value %}
+      <tr class="edit-row" hidden>
+        <td><input form="val-edit-{{ v.id }}" type="date" name="date" value="{{ v.date }}" required aria-label="Date"></td>
+        <td><input form="val-edit-{{ v.id }}" name="value" inputmode="decimal" value="{{ v.value|num }}" required aria-label="Value"></td>
+        <td class="span2"><input form="val-edit-{{ v.id }}" name="source" list="val-sources" value="{{ v.source or '' }}" autocomplete="off" aria-label="Source"></td>
+        <td class="row-actions"><button form="val-edit-{{ v.id }}" class="btn small primary">Save</button>
+          <button type="button" class="link" data-cancel>Cancel</button>
+          <button form="val-del-{{ v.id }}" class="link danger">Delete</button></td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if valuations %}<p class="hint">What it's worth (e.g. for insurance). Valuations don't affect spend or profit.</p>{% endif %}
+</section>
+{% endif %}
+
+{% set can_part = item.status == 'broken' %}
+{% if is_donor or parts %}
+<section id="parts" class="ledger-section">
+  <div class="ledger-head">
+    <h2>Parts taken off{% if parts %} <small class="muted">{{ parts|length }} · {{ (part_totals.income - part_totals.shell)|money }} income{{ ' · finished' if part_totals.finished }}</small>{% endif %}</h2>
+    {% if can_part %}<button type="button" class="btn small" data-add>+ Add part</button>{% endif %}
+  </div>
+  <form id="part-new" method="post" action="{{ url_for('part_add', item_id=item.id) }}"></form>
+  <datalist id="inside-donor">{% for c in inside_donor %}<option value="{{ c.ref }} — {{ c.name }}">{% endfor %}</datalist>
+  <div class="tablewrap" {{ 'hidden' if not parts }}>
+  <table class="data ledger parts">
+    <thead><tr><th class="c-date">Date</th><th>Part</th><th>What happened</th><th class="num c-amt">Income</th><th class="c-act"></th></tr></thead>
+    <tbody>
+      {% for r in parts %}
+      <tr class="view-row">
+        <td class="nowrap">{{ r.date or r.part.created_at[:10] }}</td>
+        <td><a href="{{ url_for('item_view', item_id=r.part.id) }}"><code class="ref">{{ r.part.ref }}</code> {{ r.part.name }}</a></td>
+        <td><span class="oc oc-{{ r.outcome }}">{{ OUTCOME_LABELS[r.outcome] }}</span>
+          {% if r.target %} → <a href="{{ url_for('item_view', item_id=r.target.id) }}">{{ r.target.ref }} {{ r.target.name }}</a>{% endif %}
+          {% if r.outcome in ('sold', 'given_away') and r.part.disposal_destination %} → {{ r.part.disposal_destination }}{% endif %}</td>
+        <td class="num">{{ r.income|money if r.outcome in ('sold', 'repair', 'broken') else '' }}</td>
+        <td class="row-actions">{% if r.outcome == 'spare' %}<a class="link small" href="{{ url_for('item_fit', item_id=r.part.id) }}">Fit</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      <tr class="new-row" hidden data-outcome="spare">
+        <td><input form="part-new" type="date" name="date" value="{{ today }}" required aria-label="Date"></td>
+        <td><input form="part-new" name="part" list="inside-donor" required autocomplete="off" aria-label="Part"
+                   placeholder="{{ 'New part, or one recorded inside' if inside_donor else 'Part name, e.g. PSU' }}"></td>
+        <td class="what"><div class="what-stack">
+          <select form="part-new" name="outcome" class="outcome" aria-label="What happened">
+            {% for k, v in PART_OUTCOMES.items() if k != 'leave' %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select>
+          <select form="part-new" name="location" class="d-loc" aria-label="Store it in">
+            <option value="">Store with the donor</option>
+            {% for loc, depth in locations %}<option value="{{ loc.id }}">{{ '  ' * depth }}{{ loc.name }}</option>{% endfor %}
+          </select>
+          <input form="part-new" name="target" class="d-target item-picker" list="item-options" autocomplete="off" placeholder="Fitted into (ref or name)" aria-label="Fitted into">
+          <input form="part-new" name="dest" class="d-dest" placeholder="To whom" aria-label="To whom">
+        </div></td>
+        <td><input form="part-new" name="value" class="d-amount" inputmode="decimal" aria-label="Amount" placeholder="{{ currency }}"></td>
+        <td class="row-actions"><button form="part-new" class="btn small primary">Save</button> <button type="button" class="link" data-cancel>Cancel</button></td>
+      </tr>
+    </tbody>
+    {% if parts %}
+    <tfoot>
+      <tr><td colspan="3">Sold / charged ({{ part_totals.n_sold|int }})</td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>
+      <tr><td colspan="3">Fitted into my items, internal price ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.repair|money }}</td><td></td></tr>
+      {% if part_totals.n_broken %}<tr><td colspan="3">From parts broken down further ({{ part_totals.n_broken|int }})</td><td class="num">{{ part_totals.broken|money }}</td><td></td></tr>{% endif %}
+      {% if part_totals.n_spare %}<tr><td colspan="3" class="muted">Still on the shelf as spares ({{ part_totals.n_spare|int }})</td><td></td><td></td></tr>{% endif %}
+    </tfoot>
+    {% endif %}
+  </table>
+  </div>
 </section>
 {% endif %}
 

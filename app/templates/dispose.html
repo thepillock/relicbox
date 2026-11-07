@@ -17,12 +17,11 @@
       <label class="wide">Sold / given to<input name="destination" placeholder="buyer, platform, friend, recycling…"></label>
       <label class="wide">Notes<input name="notes"></label>
     </div>
-    {% if item.parent_id %}
-    <label class="check"><input type="checkbox" name="detach" value="1" checked> Take it out of the item it's currently inside</label>
-    {% endif %}
     {% if ncontents %}
     <label class="check"><input type="checkbox" name="with_contents" value="1" checked> The {{ ncontents }} item(s) recorded inside it went too</label>
+    <p class="hint">If you untick this, they stay in the collection where this item is now.</p>
     {% endif %}
+    <p class="hint">It will move out of its current location to <b>Sold</b>. "Back in collection" puts it back where it was.</p>
     {% if item.purchase_price is not none %}<p class="hint">Bought for {{ item.purchase_price|money }}{% if item.purchase_date %} on {{ item.purchase_date }}{% endif %}.</p>{% endif %}
   </fieldset>
   <div class="formbar"><button class="btn primary">Save</button></div>

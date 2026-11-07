@@ -72,3 +72,63 @@ document.querySelectorAll('input[data-autosubmit]').forEach(inp =>
   radios.forEach(r => r.addEventListener('change', sync));
   sync();
 })();
+
+// Inline table editing for work log, valuations and parts taken off
+(function () {
+  const showTable = sec => { const w = sec.querySelector('.tablewrap'); if (w) w.hidden = false; };
+  const syncOutcome = row => {
+    const sel = row.querySelector('select.outcome');
+    if (!sel) return;
+    row.dataset.outcome = sel.value;
+    const target = row.querySelector('.d-target');
+    if (target) target.required = sel.value === 'repair';
+    const amt = row.querySelector('.d-amount');
+    if (amt) {
+      amt.placeholder = (document.body.dataset.currency || '') + ' price';
+      amt.title = sel.value === 'repair' ? 'Internal price (optional): counts as income for the donor and a cost for the repaired item'
+                                         : 'What it sold for';
+    }
+  };
+  function openAdd(sec) {
+    const row = sec.querySelector('tr.new-row');
+    const btn = sec.querySelector('[data-add]');
+    if (!row) return;
+    showTable(sec);
+    row.hidden = false;
+    if (btn) btn.hidden = true;
+    syncOutcome(row);
+    const first = row.querySelector('input:not([type=date]), select');
+    if (first) first.focus();
+  }
+  document.addEventListener('click', e => {
+    const t = e.target;
+    if (t.matches('[data-add]')) { openAdd(t.closest('.ledger-section')); }
+    else if (t.matches('[data-add-for]')) {
+      const sec = document.getElementById(t.dataset.addFor);
+      if (sec) { e.preventDefault(); sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); openAdd(sec); }
+    } else if (t.matches('[data-edit]')) {
+      const row = t.closest('tr');
+      row.hidden = true;
+      row.nextElementSibling.hidden = false;
+      const first = row.nextElementSibling.querySelector('input:not([type=date])');
+      if (first) first.focus();
+    } else if (t.matches('[data-cancel]')) {
+      const row = t.closest('tr'), sec = t.closest('.ledger-section');
+      row.hidden = true;
+      if (row.classList.contains('edit-row')) { row.previousElementSibling.hidden = false; return; }
+      const btn = sec.querySelector('[data-add]');
+      if (btn) btn.hidden = false;
+      if (!sec.querySelector('tr.view-row')) sec.querySelector('.tablewrap').hidden = true;
+    }
+  });
+  document.addEventListener('change', e => {
+    if (e.target.matches('tr.new-row select.outcome')) syncOutcome(e.target.closest('tr'));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const row = e.target.closest && e.target.closest('tr.new-row, tr.edit-row');
+      if (row) { const c = row.querySelector('[data-cancel]'); if (c) c.click(); }
+    }
+  });
+  if (location.hash === '#add-part') { const s = document.getElementById('parts'); if (s) openAdd(s); }
+})();

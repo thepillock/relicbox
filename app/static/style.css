@@ -248,3 +248,44 @@ table.data tr.current td { font-weight: 600; }
 #work, #value { margin-bottom: 1.5rem; }
 .valline { margin: .8rem 0 0; }
 .addbox .formbar, .log-edit .formbar { position: static; background: none; padding-bottom: 0; }
+
+/* inline-edit tables: work log, valuations, parts taken off */
+[hidden] { display: none !important; }
+.ledger-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin: 1.8rem 0 .6rem; }
+.ledger-head h2 { margin: 0; }
+table.ledger td { vertical-align: middle; }
+table.ledger td.wrap { white-space: pre-wrap; }
+table.ledger .c-date { width: 9.5rem; }
+table.ledger .c-amt { width: 8rem; }
+table.ledger .c-act { width: 1%; }
+table.ledger input, table.ledger select { width: 100%; padding: .35rem .45rem; font-size: .95rem; }
+table.ledger tr.new-row td, table.ledger tr.edit-row td { background: var(--accent-soft); }
+table.ledger tr.current td { font-weight: 600; }
+.row-actions { white-space: nowrap; text-align: right !important; }
+.row-actions .btn { padding: .3rem .7rem; }
+.what-stack { display: flex; flex-direction: column; gap: .3rem; }
+table.parts .d-loc, table.parts .d-target, table.parts .d-dest { display: none; }
+tr[data-outcome=spare] .d-loc, tr[data-outcome=repair] .d-target,
+tr[data-outcome=sold] .d-dest, tr[data-outcome=given_away] .d-dest { display: block; }
+tr.new-row:not([data-outcome=sold]):not([data-outcome=repair]) .d-amount { visibility: hidden; }
+tr.sold-row td { border-top: 2px solid var(--line); }
+@media (max-width: 640px) {
+  table.ledger, table.ledger tbody, table.ledger tfoot { display: block; width: 100%; }
+  table.ledger thead { display: none; }
+  table.ledger tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem;
+                    padding: .55rem .7rem; border-bottom: 1px solid var(--line); }
+  table.ledger td { display: block; border: 0; padding: 0; }
+  table.ledger tr.view-row td:first-child { flex-basis: 100%; font-size: .82rem; color: var(--muted); }
+  table.ledger tr.view-row td:nth-child(2) { flex: 1 1 55%; min-width: 0; }
+  table.ledger tr.view-row td.num { margin-left: auto; }
+  table.parts tr.view-row td:nth-child(3) { flex-basis: 100%; order: 5; }
+  table.ledger tfoot tr td:first-child { flex: 1; }
+  table.ledger tr.new-row, table.ledger tr.edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; }
+  table.ledger tr.new-row td.span2, table.ledger tr.edit-row td.span2, table.ledger tr.new-row td.what,
+  table.ledger tr.new-row td.row-actions, table.ledger tr.edit-row td.row-actions { grid-column: 1 / -1; }
+  table.parts tr.new-row td:nth-child(2) { grid-column: 1 / -1; order: -1; }
+  table.ledger tr.new-row td.row-actions, table.ledger tr.edit-row td.row-actions { text-align: left !important; }
+}
+
+
+.ledger-section { margin-bottom: 1.2rem; }

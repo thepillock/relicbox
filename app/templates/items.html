@@ -10,6 +10,7 @@
   <input type="search" name="q" value="{{ qtext }}" placeholder="Keywords, or descriptor:value e.g. model:a500">
   <select name="status">
     <option value="all" {{ 'selected' if status == 'all' }}>Any status</option>
+    <option value="gone" {{ 'selected' if status == 'gone' }}>Sold, given away or scrapped</option>
     {% for k, v in STATUSES.items() %}<option value="{{ k }}" {{ 'selected' if status == k }}>{{ v }}</option>{% endfor %}
   </select>
   <select name="location">{{ location_options(locations, loc or '', 'Any location') }}</select>

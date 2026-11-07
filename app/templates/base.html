@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 {% block head %}{% endblock %}
 </head>
-<body>
+<body data-currency="{{ currency }}">
 <header class="topbar">
   <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="">{{ site_name }}</a>
   {% if app_channel == 'test' %}<span class="channel-badge" title="Test build {{ app_version }}">TEST</span>{% endif %}

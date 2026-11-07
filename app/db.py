@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS ix_work_log_item ON work_log(item_id, date);
 """
 
 DEFAULT_SETTINGS = {
-    "schema_version": "3",
+    "schema_version": "4",
     "label_format": "qr",
     "public_url": "",
     "ref_prefix": "RC-",
@@ -151,7 +151,30 @@ def migrate(conn):
                            'Recorded before value history'
                     FROM items i
                     WHERE value IS NOT NULL AND NOT EXISTS (SELECT 1 FROM valuations v WHERE v.item_id = i.id)""")
-    conn.execute("UPDATE settings SET value = '3' WHERE key = 'schema_version'")
+    # v4: sold / given-away / scrapped items leave their location (they're listed under "Sold" instead)
+    # and remember where they were, so "Back in collection" can put them back.
+    for col in ("former_location_id", "former_parent_id"):
+        if col not in _columns(conn, "items"):
+            conn.execute(f"ALTER TABLE items ADD COLUMN {col} INTEGER")
+    move_out_disposed(conn)
+    conn.execute("UPDATE settings SET value = '4' WHERE key = 'schema_version'")
+
+
+DISPOSED = ("sold", "given_away", "scrapped")
+
+
+def move_out_disposed(conn):
+    """Take disposed items out of their location, and out of any container that's still in the collection.
+
+    Items that went *with* a disposed container (e.g. a card sold inside a computer) stay inside it.
+    Safe to run repeatedly.
+    """
+    gone = ",".join(f"'{s}'" for s in DISPOSED)
+    conn.execute(f"""UPDATE items SET former_location_id = COALESCE(former_location_id, location_id), location_id = NULL
+                     WHERE status IN ({gone}) AND location_id IS NOT NULL""")
+    conn.execute(f"""UPDATE items SET former_parent_id = COALESCE(former_parent_id, parent_id), parent_id = NULL
+                     WHERE status IN ({gone}) AND parent_id IS NOT NULL
+                       AND parent_id IN (SELECT id FROM items WHERE status NOT IN ({gone}))""")
 
 
 def get_db():

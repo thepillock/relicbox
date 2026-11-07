@@ -73,6 +73,7 @@ PART_OUTCOMES = {
     "given_away": "Given away",
     "scrapped": "Scrapped",
 }
+DISPOSED = dbm.DISPOSED
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
 
 
@@ -204,6 +205,43 @@ def location_descendants(loc_id, children):
 
 
 # --- items ----------------------------------------------------------------
+def move_out(item_id):
+    """A sold / given-away / scrapped item leaves its location (it's listed under "Sold") and any
+    container still in the collection, remembering both so "Back in collection" can restore them."""
+    it = q("SELECT * FROM items WHERE id = ?", (item_id,), one=True)
+    parent = q("SELECT status FROM items WHERE id = ?", (it["parent_id"],), one=True) if it["parent_id"] else None
+    if parent and parent["status"] in DISPOSED:
+        return  # went along with a container that is itself gone: stays inside it
+    ex("""UPDATE items SET former_location_id = COALESCE(?, former_location_id),
+          former_parent_id = COALESCE(?, former_parent_id), location_id = NULL, parent_id = NULL WHERE id = ?""",
+       (it["location_id"], it["parent_id"], item_id))
+
+
+def move_back(item_id):
+    """Put a returned item back where it was, if that place still exists. Returns True if placed."""
+    it = q("SELECT * FROM items WHERE id = ?", (item_id,), one=True)
+    placed = it["location_id"] is not None or it["parent_id"] is not None
+    if not placed and it["former_parent_id"]:
+        p = q("SELECT status FROM items WHERE id = ?", (it["former_parent_id"],), one=True)
+        if p and p["status"] not in DISPOSED and it["former_parent_id"] not in item_descendant_ids(item_id):
+            ex("UPDATE items SET parent_id = ? WHERE id = ?", (it["former_parent_id"], item_id))
+            placed = True
+    if not placed and it["former_location_id"] and \
+            q("SELECT 1 FROM locations WHERE id = ?", (it["former_location_id"],), one=True):
+        ex("UPDATE items SET location_id = ? WHERE id = ?", (it["former_location_id"], item_id))
+        placed = True
+    ex("UPDATE items SET former_location_id = NULL, former_parent_id = NULL WHERE id = ?", (item_id,))
+    return placed
+
+
+def former_place(item):
+    """(location path, container row) an item was in before it was sold, for display."""
+    parent = q("SELECT * FROM items WHERE id = ?", (item["former_parent_id"],), one=True) \
+        if item["former_parent_id"] else None
+    loc_id = effective_location_id(parent) if parent else item["former_location_id"]
+    return location_path(loc_id), parent
+
+
 def get_item(item_id):
     row = q("SELECT * FROM items WHERE id = ?", (item_id,), one=True)
     if not row:
@@ -423,7 +461,10 @@ def search_items(qtext="", status="active", location_id=None, limit=None):
                 continue
         where.append(f"{SEARCH_TEXT} LIKE ?")
         args.append(f"%{tok}%")
-    if status and status != "all":
+    if status == "gone":
+        where.append(f"i.status IN ({','.join('?' * len(DISPOSED))})")
+        args.extend(DISPOSED)
+    elif status and status != "all":
         where.append("i.status = ?")
         args.append(status)
     sql = "SELECT i.* FROM items i"
@@ -596,6 +637,8 @@ def item_form_data(form, existing=None):
             parent = None
     data["parent_id"] = parent["id"] if parent else None
     data["location_id"] = None if parent else existing_location_id(form.get("location_id"), errors)
+    if existing and existing["status"] in DISPOSED and data["status"] in DISPOSED:
+        data["parent_id"], data["location_id"] = existing["parent_id"], existing["location_id"]
 
     hv_text = (form.get("harvested_from") or "").strip()
     hv = resolve_item(hv_text) if hv_text else None
@@ -697,13 +740,17 @@ def item_view(item_id):
     valuations = q("SELECT * FROM valuations WHERE item_id = ? ORDER BY date DESC, id DESC", (item_id,))
     work = q("SELECT * FROM work_log WHERE item_id = ? ORDER BY date DESC, id DESC", (item_id,))
     latest = valuations[0] if valuations else None
+    was_path, was_in = former_place(item) if item["status"] in DISPOSED else ([], None)
+    inside_donor = q("SELECT ref, name FROM items WHERE parent_id = ? AND status = 'active' "
+                     "ORDER BY name COLLATE NOCASE", (item_id,)) if item["status"] == "broken" else []
     sources = [r["source"] for r in q("SELECT DISTINCT source FROM valuations WHERE source IS NOT NULL "
                                       "AND source != 'Recorded before value history' ORDER BY 1")]
     return render_template("item_view.html", item=item, ancestors=ancestors, loc_path=loc_path,
                            contents=contents, photos=photos, descriptors=descriptors, donor=donor,
                            parts=parts, part_totals=part_totals, contents_cost=contents_cost,
                            valuations=valuations, work=work, latest=latest,
-                           sources=sources, today=today())
+                           sources=sources, today=today(), was_path=was_path, was_in=was_in,
+                           inside_donor=inside_donor, locations=location_tree(), DISPOSED=DISPOSED)
 
 
 @app.route("/items/<int:item_id>/edit", methods=["GET", "POST"])
@@ -724,6 +771,11 @@ def item_edit(item_id):
         cols = ITEM_FIELDS + ["updated_at"]
         ex(f"UPDATE items SET {', '.join(c + ' = ?' for c in cols)} WHERE id = ?",
            [data[c] for c in cols] + [item_id])
+        if data["status"] in DISPOSED and item["status"] not in DISPOSED:
+            move_out(item_id)
+        elif item["status"] in DISPOSED and data["status"] not in DISPOSED and data["location_id"] is None \
+                and data["parent_id"] is None:
+            move_back(item_id)
         save_descriptors(item_id, request.form)
         for fs in request.files.getlist("photos"):
             save_photo(item_id, fs)
@@ -766,19 +818,21 @@ def item_dispose(item_id):
         if kind not in ("sold", "given_away", "scrapped"):
             abort(400)
         price = parse_money(request.form.get("price")) if kind == "sold" else None
-        detach = request.form.get("detach") == "1"
+        was_at = effective_location_id(item)
         ex("""UPDATE items SET status = ?, disposal_date = ?, disposal_price = ?, disposal_destination = ?,
               notes = CASE WHEN ? IS NULL THEN notes ELSE COALESCE(notes || char(10), '') || ? END,
               updated_at = ? WHERE id = ?""",
            (kind, parse_date(request.form.get("date")) or today(), price, clean(request.form.get("destination")),
             clean(request.form.get("notes")), clean(request.form.get("notes")), now(), item_id))
-        if detach and item["parent_id"]:
-            ex("UPDATE items SET location_id = ?, parent_id = NULL WHERE id = ?", (effective_location_id(item), item_id))
         if request.form.get("with_contents") == "1":
             for cid in item_descendant_ids(item_id):
                 ex("""UPDATE items SET status = ?, disposal_date = ?, disposal_price = NULL,
                       disposal_destination = ?, updated_at = ? WHERE id = ? AND status = 'active'""",
                    (kind, parse_date(request.form.get("date")) or today(), f"With {item['ref']}", now(), cid))
+        else:  # parts it didn't go with stay in the collection, where the item was
+            ex("UPDATE items SET parent_id = NULL, location_id = ? WHERE parent_id = ? AND status NOT IN (?, ?, ?)",
+               (was_at, item_id) + DISPOSED)
+        move_out(item_id)
         commit()
         flash(f"Marked as {STATUSES[kind].lower()}", "ok")
         return redirect(url_for("item_view", item_id=item_id))
@@ -796,8 +850,12 @@ def item_reinstate(item_id):
               disposal_destination = NULL WHERE id = ? AND disposal_destination = ?""", (cid, f"With {item['ref']}"))
     ex("""UPDATE items SET status = 'active', disposal_date = NULL, disposal_price = NULL,
           disposal_destination = NULL, broken_date = NULL, updated_at = ? WHERE id = ?""", (now(), item_id))
+    placed = move_back(item_id)
     commit()
-    flash("Returned to the collection", "ok")
+    if placed:
+        flash("Returned to the collection, back where it was", "ok")
+    else:
+        flash("Returned to the collection. Its old place no longer exists, so edit it to say where it is now.", "ok")
     return redirect(url_for("item_view", item_id=item_id))
 
 
@@ -815,6 +873,21 @@ def valuation_add(item_id):
         commit()
         flash("Valuation added", "ok")
     return redirect(url_for("item_view", item_id=item_id) + "#value")
+
+
+@app.route("/valuations/<int:val_id>/edit", methods=["POST"])
+def valuation_edit(val_id):
+    row = q("SELECT * FROM valuations WHERE id = ?", (val_id,), one=True) or abort(404)
+    value = parse_money(request.form.get("value"))
+    if value is None:
+        flash("Enter a value.", "error")
+    else:
+        ex("UPDATE valuations SET date = ?, value = ?, source = ? WHERE id = ?",
+           (parse_date(request.form.get("date")) or row["date"], value, clean(request.form.get("source")), val_id))
+        refresh_value(row["item_id"])
+        commit()
+        flash("Valuation updated", "ok")
+    return redirect(url_for("item_view", item_id=row["item_id"]) + "#value")
 
 
 @app.route("/valuations/<int:val_id>/delete", methods=["POST"])
@@ -911,6 +984,47 @@ def item_fit(item_id):
 
 
 # --- breakdown for spares ---------------------------------------------------
+def apply_part(donor_id, donor_loc, existing, oc, r, target, date):
+    """Record one part taken off a donor (new, or one already recorded inside it)."""
+    val = parse_money(r["value"])
+    fields = {
+        "harvested_from_id": donor_id,
+        "parent_id": None,
+        "location_id": None,
+        "status": "active",
+        "disposal_date": None,
+        "disposal_price": None,
+        "disposal_destination": None,
+        "updated_at": now(),
+    }
+    if oc == "spare":
+        fields["location_id"] = int_or_none(r["location"]) or donor_loc
+    elif oc == "repair":
+        fields["parent_id"] = target["id"]
+    elif oc in ("sold", "given_away", "scrapped"):
+        fields["status"] = oc
+        fields["former_location_id"] = donor_loc
+        fields["disposal_date"] = date
+        fields["disposal_price"] = (val or 0.0) if oc == "sold" else None
+        fields["disposal_destination"] = clean(r["dest"])
+    if existing:
+        if clean(r["desc"]):
+            ex("UPDATE items SET notes = COALESCE(notes || char(10), '') || ? WHERE id = ?",
+               (r["desc"].strip(), existing))
+        ex(f"UPDATE items SET {', '.join(k + ' = ?' for k in fields)} WHERE id = ?",
+           list(fields.values()) + [existing])
+        part_id = existing
+    else:
+        # a new part's "added" date is the day it came off the donor
+        fields.update(ref=allocate_ref(), name=r["name"].strip(), description=clean(r["desc"]),
+                      created_at=date if date != today() else now(), purchase_date=None)
+        part_id = ex(f"INSERT INTO items({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
+                     list(fields.values()))
+    if oc == "repair":
+        record_fit(part_id, target, val, date, clean(r["desc"]))
+    return part_id
+
+
 @app.route("/items/<int:item_id>/breakdown", methods=["GET", "POST"])
 def item_breakdown(item_id):
     donor = get_item(item_id)
@@ -958,41 +1072,7 @@ def item_breakdown(item_id):
                 ex("UPDATE items SET notes = COALESCE(notes || char(10), '') || ? WHERE id = ?",
                    (f"[{date}] {f.get('notes').strip()}", item_id))
             for existing, oc, r, target in plan:
-                val = parse_money(r["value"])
-                fields = {
-                    "harvested_from_id": item_id,
-                    "parent_id": None,
-                    "location_id": None,
-                    "status": "active",
-                    "disposal_date": None,
-                    "disposal_price": None,
-                    "disposal_destination": None,
-                    "updated_at": now(),
-                }
-                if oc == "spare":
-                    fields["location_id"] = int_or_none(r["location"]) or donor_loc
-                elif oc == "repair":
-                    fields["parent_id"] = target["id"]
-                elif oc in ("sold", "given_away", "scrapped"):
-                    fields["status"] = oc
-                    fields["location_id"] = donor_loc
-                    fields["disposal_date"] = date
-                    fields["disposal_price"] = (val or 0.0) if oc == "sold" else None
-                    fields["disposal_destination"] = clean(r["dest"])
-                if existing:
-                    if clean(r["desc"]):
-                        ex("UPDATE items SET notes = COALESCE(notes || char(10), '') || ? WHERE id = ?",
-                           (r["desc"].strip(), existing))
-                    ex(f"UPDATE items SET {', '.join(k + ' = ?' for k in fields)} WHERE id = ?",
-                       list(fields.values()) + [existing])
-                    part_id = existing
-                else:
-                    fields.update(ref=allocate_ref(), name=r["name"].strip(), description=clean(r["desc"]),
-                                  created_at=now(), purchase_date=None)
-                    part_id = ex(f"INSERT INTO items({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
-                                 list(fields.values()))
-                if oc == "repair":
-                    record_fit(part_id, target, val, date, clean(r["desc"]))
+                apply_part(item_id, donor_loc, existing, oc, r, target, date)
             commit()
             flash(f"Recorded {len(plan)} part(s) from {donor['ref']}", "ok")
             return redirect(url_for("item_view", item_id=item_id))
@@ -1011,6 +1091,50 @@ def item_breakdown(item_id):
     parts, part_totals = breakdown_summary(item_id)
     return render_template("breakdown.html", donor=donor, rows=rows, locations=location_tree(),
                            donor_loc=donor_loc, today=today(), parts=parts, part_totals=part_totals)
+
+
+@app.route("/items/<int:item_id>/parts", methods=["POST"])
+def part_add(item_id):
+    """One part from the inline row on a donor's page: a new part, or one already recorded inside it."""
+    donor = get_item(item_id)
+    back = redirect(url_for("item_view", item_id=item_id) + "#parts")
+    if donor["status"] != "broken":
+        flash("Parts can only be added while the item is being broken for spares.", "error")
+        return back
+    f = request.form
+    text, oc = (f.get("part") or "").strip(), f.get("outcome")
+    r = {"name": text, "value": f.get("value", ""), "location": f.get("location", ""),
+         "target": f.get("target", ""), "dest": f.get("dest", ""), "desc": ""}
+    errors = []
+    if not text:
+        errors.append("Enter the part's name.")
+    if oc not in PART_OUTCOMES or oc == "leave":
+        errors.append("Choose what happened to the part.")
+    inside = resolve_item(text) if text else None
+    existing = inside["id"] if inside and inside["parent_id"] == item_id else None
+    if existing:
+        r["name"] = inside["name"]
+    target = None
+    if oc == "repair":
+        target = resolve_item(r["target"])
+        if not target:
+            errors.append(f"Couldn't find the item it was fitted into ('{r['target']}').")
+        elif target["id"] == item_id or (existing and (target["id"] == existing or
+                                                       target["id"] in item_descendant_ids(existing))):
+            errors.append("A part can't be fitted into the donor or into itself.")
+    if oc == "spare" and r["location"]:
+        existing_location_id(r["location"], errors, "The place you chose to store it")
+    if errors:
+        for e in errors:
+            flash(e, "error")
+        return back
+    date = parse_date(f.get("date")) or today()
+    part_id = apply_part(item_id, effective_location_id(donor), existing, oc, r, target, date)
+    ex("UPDATE items SET updated_at = ? WHERE id = ?", (now(), item_id))
+    commit()
+    ref = q("SELECT ref FROM items WHERE id = ?", (part_id,), one=True)["ref"]
+    flash(f"Recorded {r['name']} ({ref})", "ok")
+    return back
 
 
 # --- photos -----------------------------------------------------------------
@@ -1252,9 +1376,16 @@ def location_stats():
     return stats
 
 
+def gone_stats():
+    """Totals for the built-in "Sold" entry: everything sold, given away or scrapped."""
+    r = q(f"""SELECT COUNT(*) AS count, COALESCE(SUM(CASE WHEN status = 'sold' THEN disposal_price END), 0) AS income
+              FROM items WHERE status IN ({','.join('?' * len(DISPOSED))})""", DISPOSED, one=True)
+    return dict(r)
+
+
 @app.route("/locations")
 def locations():
-    return render_template("locations.html", tree=location_tree(), stats=location_stats())
+    return render_template("locations.html", tree=location_tree(), stats=location_stats(), gone=gone_stats())
 
 
 def location_form_data(form, existing=None):

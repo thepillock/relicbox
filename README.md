@@ -14,16 +14,17 @@ Python/Flask + SQLite, one container, no external services. Everything (database
 - **Photos**: multiple per item, auto-rotated, resized and thumbnailed, with a choice of main photo.
 - **User-defined descriptors** (Manufacturer, Model, Serial number, Version…). Set them up in Settings.
 - **Purchase info**: date, price, seller and platform (autocompletes from earlier entries).
+- Work log, valuations and parts taken off are tables on the item page. They're hidden when empty, and you add or edit rows in place.
 - **Work log**: a dated entry for each repair or job, with what was done and what it cost. The item page shows the spend: purchase + work = total spent, and the sale price and profit once sold.
 - **Valuations**: a separate, dated record of what each item is worth (e.g. for insurance), each with a source. They don't affect spend or profit; lists and reports show them as their own total.
-- **Sold / given away / scrapped**: date, price and destination. Optionally the contents go with the item.
+- **Sold / given away / scrapped**: date, price and destination. Optionally the contents go with the item. The item leaves its location and is listed under **Sold** on the Locations page. Sold isn't a real location, so only recording a sale puts things there. **Back in collection** returns it to where it was.
 - **Breaking for spares**: a donor leaves the collection and is treated like a sale whose price builds up part by part. List the parts as you take them off. Each part becomes its own item (with a reference number and a link back to the donor) and has one of these outcomes:
   - *Keep as spare*: goes to a location. It earns nothing until it's sold or fitted.
   - *Fitted into one of my items*: gets nested inside the repaired item, with an optional internal price. That price is income for the donor and a work log cost on the repaired item.
   - *Sold / charged to someone*: records the price and who to.
   - *Given away / scrapped*.
   
-  Parts already recorded inside the donor can be processed the same way, and you can add more parts later. A spare on the shelf has **Fit into another item** and **Sold / given away** buttons, and its income still goes to the donor even after the donor is finished. When nothing more will come off the donor, use **Finished: dispose of shell** (selling the shell adds to its income).
+  Parts already recorded inside the donor can be processed the same way. Later parts are added straight into the **Parts taken off** table on the donor's page. A spare on the shelf has **Fit into another item** and **Sold / given away** buttons, and its income still goes to the donor even after the donor is finished. When nothing more will come off the donor, use **Finished: dispose of shell** (selling the shell adds to its income).
 - **Search**: keywords across name, ref, barcode, descriptors, notes, seller etc. Use `descriptor:value` to filter on one descriptor, e.g. `manufacturer:commodore model:a1200`.
 - **Reports**:
   - Collection: item count, spend and valuations, per location (sub-locations included) and by any descriptor.

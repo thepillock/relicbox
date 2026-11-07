@@ -24,6 +24,11 @@
     <tr><td class="muted"><a href="{{ url_for('items_list', status='active') }}">No location set</a></td>
       <td class="num">{{ stats[None].count }}</td><td class="num">{{ stats[None].cost|money }}</td><td class="num muted">{{ (stats[None].value or none)|money('') }}</td></tr>
   {% endif %}
+  {% if gone.count %}
+    <tr class="sold-row"><td><a href="{{ url_for('items_list', status='gone') }}">Sold</a>
+        <div class="muted small">Sold, given away or scrapped. Items go here when you record a sale.</div></td>
+      <td class="num">{{ gone.count }}</td><td class="num" colspan="2"><span class="muted small">income</span> {{ gone.income|money }}</td></tr>
+  {% endif %}
   </tbody>
 </table>
 </div>

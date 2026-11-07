@@ -40,6 +40,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           python tests/smoke.py
+          python tests/test_sold_and_ledgers.py
 
       - name: Work out channel and version
         id: ver
