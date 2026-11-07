@@ -132,3 +132,20 @@ document.querySelectorAll('input[data-autosubmit]').forEach(inp =>
   });
   if (location.hash === '#add-part') { const s = document.getElementById('parts'); if (s) openAdd(s); }
 })();
+
+// Location pages: drop down the contents of items
+(function () {
+  const setOpen = (btn, open) => {
+    const sub = btn.closest('li.node').querySelector(':scope > ul.sub');
+    if (!sub) return;
+    sub.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.title = open ? 'Hide what\'s inside' : 'Show what\'s inside';
+  };
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('button.toggle');
+    if (btn) { setOpen(btn, btn.getAttribute('aria-expanded') !== 'true'); return; }
+    const all = e.target.closest('[data-tree]');
+    if (all) document.querySelectorAll('ul.tree button.toggle').forEach(b => setOpen(b, all.dataset.tree === 'open'));
+  });
+})();

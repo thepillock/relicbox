@@ -84,3 +84,20 @@ assert sold_psu == (None, box), sold_psu
 assert b"Fitted Floppy drive" in c.get(f"/items/{item}").data
 r = post(f"/items/{item}/parts", {"part": "X", "outcome": "spare"}); assert b"only be added while" in r.data
 print("ALL OK")
+
+# 7. location page: contents drop down under their container, any depth; no valuations in lists
+loc = int(re.search(r"/locations/(\d+)", post("/locations/new", {"name": "Rack"}).request.path).group(1))
+pc = new_item(name="Big Box PC", location_id=loc)
+card2 = new_item(name="Zorro card", parent=row(pc)["ref"])
+chip = new_item(name="CPU chip", parent=row(card2)["ref"])
+lone = new_item(name="Lonely mouse", location_id=loc)
+post(f"/items/{pc}/valuations", {"value": "999", "date": "2026-11-07"})
+html = c.get(f"/locations/{loc}").data.decode()
+assert "Show all subitems" in html and html.count('class="toggle"') == 2   # PC and card, not the chip or mouse
+assert html.index("Big Box PC") < html.index("Zorro card") < html.index("CPU chip") < html.index("Lonely mouse") or \
+       html.index("Big Box PC") < html.index("Zorro card") < html.index("CPU chip")
+assert re.search(r'<ul class="cards tree sub" hidden>', html)
+for page in (f"/locations/{loc}", "/locations", "/items", "/"):
+    assert "£999.00" not in c.get(page).data.decode(), page
+assert "£999.00" in c.get(f"/items/{pc}").data.decode()
+print("ALL OK (tree)")

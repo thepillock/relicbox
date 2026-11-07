@@ -188,9 +188,9 @@ assert val600() == {"value": 130, "work_cost": 20}
 post(f"/items/{a600}/work", {"date": "2025-05-02", "description": "Fan", "cost": "5"})
 html = ok(c.get(f"/items/{a600}")).data.decode()
 assert "Work log" in html and "Valuations" in html and "£125.00" in html
-# items list shows both running totals separately
+# items list shows spend; valuations stay on the item page and in reports
 html = ok(c.get("/items?q=Amiga+600")).data.decode()
-assert "£125.00 spent" in html and "valued at £130.00" in html
+assert "£125.00 spent" in html and "valued at" not in html and "£130.00" not in html
 # profit = sale - (purchase + work), not affected by valuation
 post(f"/items/{a600}/dispose", {"kind": "sold", "price": "200", "date": "2025-06-01"})
 html = ok(c.get(f"/items/{a600}")).data.decode()

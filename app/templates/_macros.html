@@ -14,10 +14,7 @@
   {%- for l in r.loc_path %}{{ ' › ' if not loop.first }}<a href="{{ url_for('location_view', loc_id=l.id) }}">{{ l.name }}</a>{% endfor %}
 {%- endmacro %}
 
-{% macro item_cards(rows, show_where=True) -%}
-<ul class="cards">
-{% for r in rows %}
-  <li class="card st-{{ r.status }}">
+{% macro card_inner(r, show_where=True) -%}
     <a class="thumb" href="{{ url_for('item_view', item_id=r.id) }}">
       {% if r.photo %}<img loading="lazy" src="{{ url_for('media_thumb', filename=r.photo) }}" alt="">{% else %}<span class="nophoto">{{ r.name[:1] }}</span>{% endif %}
     </a>
@@ -29,9 +26,34 @@
     <div class="card-value">
       {% if r.status == 'sold' %}{{ r.disposal_price|money }}{% else %}{{ known_cost(r)|money('') }}{% endif %}
     </div>
-  </li>
+{%- endmacro %}
+
+{% macro item_cards(rows, show_where=True) -%}
+<ul class="cards">
+{% for r in rows %}
+  <li class="card st-{{ r.status }}">{{ card_inner(r, show_where) }}</li>
 {% else %}
   <li class="empty">Nothing here yet.</li>
+{% endfor %}
+</ul>
+{%- endmacro %}
+
+{# Items with their contents as a drop-down tree (location pages). #}
+{% macro item_tree(rows, depth=0) -%}
+<ul class="cards tree{{ ' sub' if depth }}"{% if depth %} hidden{% endif %}>
+{% for r in rows %}
+  <li class="node">
+    <div class="card st-{{ r.status }} has-toggle">
+      {% if r.children %}
+      <button type="button" class="toggle" aria-expanded="false" title="Show what's inside">
+        <span class="caret">▸</span><span class="n">{{ r.n_inside }}</span></button>
+      {% else %}<span class="toggle-spacer"></span>{% endif %}
+      {{ card_inner(r, False) }}
+    </div>
+    {% if r.children %}{{ item_tree(r.children, depth + 1) }}{% endif %}
+  </li>
+{% else %}
+  {% if not depth %}<li class="empty">Nothing here yet.</li>{% endif %}
 {% endfor %}
 </ul>
 {%- endmacro %}

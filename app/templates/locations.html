@@ -8,7 +8,7 @@
 {% if tree %}
 <div class="tablewrap">
 <table class="data tree">
-  <thead><tr><th>Location</th><th class="num">Items</th><th class="num">Spent</th><th class="num">Valued at</th></tr></thead>
+  <thead><tr><th>Location</th><th class="num">Items</th><th class="num">Spent</th></tr></thead>
   <tbody>
   {% for loc, depth in tree %}
     {% set s = stats.get(loc.id) %}
@@ -17,17 +17,16 @@
         {% if loc.description %}<div class="muted small">{{ loc.description|truncate(90) }}</div>{% endif %}</td>
       <td class="num">{{ s.count if s else 0 }}</td>
       <td class="num">{{ (s.cost if s else 0)|money }}</td>
-      <td class="num muted">{{ (s.value if s and s.value else none)|money('') }}</td>
     </tr>
   {% endfor %}
   {% if stats.get(None) %}
     <tr><td class="muted"><a href="{{ url_for('items_list', status='active') }}">No location set</a></td>
-      <td class="num">{{ stats[None].count }}</td><td class="num">{{ stats[None].cost|money }}</td><td class="num muted">{{ (stats[None].value or none)|money('') }}</td></tr>
+      <td class="num">{{ stats[None].count }}</td><td class="num">{{ stats[None].cost|money }}</td></tr>
   {% endif %}
   {% if gone.count %}
     <tr class="sold-row"><td><a href="{{ url_for('items_list', status='gone') }}">Sold</a>
         <div class="muted small">Sold, given away or scrapped. Items go here when you record a sale.</div></td>
-      <td class="num">{{ gone.count }}</td><td class="num" colspan="2"><span class="muted small">income</span> {{ gone.income|money }}</td></tr>
+      <td class="num">{{ gone.count }}</td><td class="num"><span class="muted small">income</span> {{ gone.income|money }}</td></tr>
   {% endif %}
   </tbody>
 </table>

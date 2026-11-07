@@ -17,7 +17,7 @@
 
 <section class="stats">
   <a class="stat" href="{{ url_for('items_list') }}"><b>{{ stats.active or 0 }}</b><span>items in collection</span></a>
-  <a class="stat" href="{{ url_for('reports') }}"><b>{{ (stats.cost or 0)|money }}</b><span>spent on collection{% if stats.value %} · valued at {{ stats.value|money }}{% endif %}</span></a>
+  <a class="stat" href="{{ url_for('reports') }}"><b>{{ (stats.cost or 0)|money }}</b><span>spent on collection</span></a>
   <a class="stat" href="{{ url_for('items_list', status='sold') }}"><b>{{ stats.sold or 0 }}</b><span>sold · {{ (stats.income or 0)|money }}</span></a>
   <a class="stat" href="{{ url_for('items_list', status='broken') }}"><b>{{ stats.broken or 0 }}</b><span>breaking for spares</span></a>
   <a class="stat" href="{{ url_for('locations') }}"><b>{{ nloc }}</b><span>locations</span></a>

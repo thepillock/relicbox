@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% from '_macros.html' import item_cards with context %}
+{% from '_macros.html' import item_tree with context %}
 {% block title %}{{ loc.name }}{% endblock %}
 {% block body %}
 <nav class="crumbs"><a href="{{ url_for('locations') }}">Locations</a>
@@ -7,7 +7,7 @@
 <div class="pagehead">
   <div><h1>{{ loc.name }}</h1>
     {% set s = stats.get(loc.id) %}
-    <div class="sub muted">{{ s.count if s else 0 }} items in here (including sub-locations) · {{ (s.cost if s else 0)|money }} spent{% if s and s.value %} · valued at {{ s.value|money }}{% endif %}</div></div>
+    <div class="sub muted">{{ s.count if s else 0 }} items in here (including sub-locations) · {{ (s.cost if s else 0)|money }} spent</div></div>
   <div class="actions">
     <a class="btn primary" href="{{ url_for('item_new', location_id=loc.id) }}">+ Add item here</a>
     <a class="btn" href="{{ url_for('location_new', parent_id=loc.id) }}">+ Sub-location</a>
@@ -27,13 +27,19 @@
 {% endif %}
 
 <div class="pagehead">
-  <h2>Stored directly here</h2>
-  <form class="inline"><select name="status" onchange="this.form.submit()">
+  <h2>Stored here</h2>
+  <div class="actions">
+    {% if has_nested %}
+    <button type="button" class="btn small" data-tree="open">Show all subitems</button>
+    <button type="button" class="btn small" data-tree="close">Hide all subitems</button>
+    {% endif %}
+    <form class="inline"><select name="status" onchange="this.form.submit()">
     <option value="active" {{ 'selected' if status == 'active' }}>In collection</option>
     <option value="all" {{ 'selected' if status == 'all' }}>Any status</option>
   </select></form>
+  </div>
 </div>
-{{ item_cards(items, show_where=False) }}
+{{ item_tree(items) }}
 
 <section class="danger-zone">
   <form method="post" action="{{ url_for('location_delete', loc_id=loc.id) }}" class="inline" data-confirm="Delete {{ loc.name }}? Its sub-locations and items will move up one level.">

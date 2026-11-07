@@ -494,6 +494,30 @@ def decorate(rows):
     return rows
 
 
+def attach_contents(rows, status="active"):
+    """Give each listed item a 'children' list (its contents, recursively) for the drop-down tree."""
+    sql = "SELECT * FROM items WHERE parent_id IS NOT NULL"
+    args = ()
+    if status != "all":
+        sql, args = sql + " AND status = ?", (status,)
+    nested = [dict(r) for r in q(sql + " ORDER BY name COLLATE NOCASE", args)]
+    decorate(nested)
+    by_parent = defaultdict(list)
+    for r in nested:
+        by_parent[r["parent_id"]].append(r)
+
+    def fill(row, seen):
+        row["children"] = [c for c in by_parent.get(row["id"], []) if c["id"] not in seen]
+        row["n_inside"] = 0
+        for c in row["children"]:
+            fill(c, seen | {c["id"]})
+            row["n_inside"] += 1 + c["n_inside"]
+
+    for r in rows:
+        fill(r, {r["id"]})
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # Template plumbing
 # ---------------------------------------------------------------------------
@@ -1428,9 +1452,11 @@ def location_view(loc_id):
         "SELECT * FROM items WHERE location_id = ? AND parent_id IS NULL" +
         ("" if status == "all" else " AND status = ?") + " ORDER BY name COLLATE NOCASE",
         (loc_id,) if status == "all" else (loc_id, status))])
+    attach_contents(direct, status)
     stats = location_stats()
     return render_template("location_view.html", loc=loc, path=location_path(loc_id, loc_by_id),
-                           sublocs=children.get(loc_id, []), items=direct, stats=stats, status=status)
+                           sublocs=children.get(loc_id, []), items=direct, stats=stats, status=status,
+                           has_nested=any(r["children"] for r in direct))
 
 
 @app.route("/locations/<int:loc_id>/edit", methods=["GET", "POST"])
