@@ -36,11 +36,6 @@
     <dl class="facts">
       {% for d in descriptors %}<dt>{{ d.name }}</dt><dd>{{ d.value }}</dd>{% endfor %}
       {% if item.barcode %}<dt>Product barcode</dt><dd class="mono">{{ item.barcode }}</dd>{% endif %}
-      <dt>Value</dt><dd>{% if latest %}{{ item.value|money }}
-          <div class="muted small">valued {{ latest.date }}{% if latest.source %} · {{ latest.source }}{% endif %}{% if work_since %} · + {{ work_since|money }} work since{% endif %}</div>
-        {% else %}{{ known_cost(item)|money }} <div class="muted small">{{ 'what it has cost so far · ' if known_cost(item) is not none }}not valued yet</div>{% endif %}
-        {% if contents_value %}<div class="muted small">+ {{ contents_value|money }} of parts inside</div>{% endif %}
-        <a class="small" href="#value">Valuations</a></dd>
       {% if donor %}<dt>Harvested from</dt><dd><a href="{{ url_for('item_view', item_id=donor.id) }}">{{ donor.ref }} — {{ donor.name }}</a></dd>{% endif %}
     </dl>
 
@@ -52,23 +47,29 @@
       <dt>Platform</dt><dd>{{ item.purchase_platform or '—' }}</dd>
     </dl>
 
-    {% if work %}
-    <h3>Cost</h3>
+    <h3>Spend</h3>
     <table class="totals">
       <tr><td>Purchase</td><td>{{ item.purchase_price|money }}</td></tr>
-      <tr><td><a href="#work">Work done</a> ({{ work|length }} entr{{ 'y' if work|length == 1 else 'ies' }})</td><td>{{ item.work_cost|money }}</td></tr>
-      <tr class="net"><td>Total</td><td>{{ cost_basis(item)|money }}</td></tr>
+      <tr><td><a href="#work">Work done</a>{% if work %} ({{ work|length }} entr{{ 'y' if work|length == 1 else 'ies' }}){% endif %}</td><td>{{ item.work_cost|money }}</td></tr>
+      <tr class="net"><td>Total spent</td><td>{{ cost_basis(item)|money }}</td></tr>
+      {% if item.status == 'sold' %}
+      <tr><td>Sold for</td><td>{{ item.disposal_price|money }}</td></tr>
+      {% if item.disposal_price is not none and not item.harvested_from_id and not item.broken_date %}
+      {% set pl = item.disposal_price - cost_basis(item) %}
+      <tr class="net"><td>{{ 'Profit' if pl >= 0 else 'Loss' }}</td><td class="{{ 'pos' if pl >= 0 else 'neg' }}">{{ pl|abs|money }}</td></tr>
+      {% endif %}{% endif %}
     </table>
-    {% endif %}
+    {% if contents_cost %}<p class="hint">Plus {{ contents_cost|money }} spent on the parts recorded inside it.</p>{% endif %}
+
+    <p class="valline"><span class="muted">Valuation</span>
+      {% if latest %}<b>{{ latest.value|money }}</b> <span class="muted small">{{ latest.date }}{% if latest.source %} · {{ latest.source }}{% endif %}</span>
+      {% else %}<span class="muted">none recorded</span>{% endif %}
+      · <a class="small" href="#value">{{ 'History' if latest else 'Add one' }}</a></p>
 
     {% if item.status in ('sold', 'given_away', 'scrapped') %}
     <h3>{{ STATUSES[item.status] }}</h3>
     <dl class="facts">
       <dt>Date</dt><dd>{{ item.disposal_date or '—' }}</dd>
-      {% if item.status == 'sold' %}<dt>Price</dt><dd>{{ item.disposal_price|money }}
-        {% if known_cost(item) is not none and item.disposal_price is not none and not item.harvested_from_id %}
-          {% set pl = item.disposal_price - cost_basis(item) %}
-          <span class="muted">({{ 'profit' if pl >= 0 else 'loss' }} {{ pl|abs|money }}{{ ' after work costs' if item.work_cost }})</span>{% endif %}</dd>{% endif %}
       {% if item.disposal_destination %}<dt>To</dt><dd>{{ item.disposal_destination }}</dd>{% endif %}
     </dl>
     {% endif %}
@@ -136,7 +137,7 @@
       <div class="formbar"><button class="btn primary small">Add entry</button></div>
     </form>
   </details>
-  <p class="hint">Costs are added to what the item has cost, and to its value if they're dated after its latest valuation.</p>
+  <p class="hint">Costs here are added to the item's total spend.</p>
 </section>
 
 <section id="value">
@@ -166,7 +167,7 @@
       <div class="formbar"><button class="btn primary small">Add valuation</button></div>
     </form>
   </details>
-  <p class="hint">The latest valuation is the item's current value. Value it without the parts listed inside it, as those are counted separately.</p>
+  <p class="hint">Valuations are a record of what the item is worth (e.g. for insurance). They don't affect spend or profit. Value it without the parts listed inside it, as those are valued separately.</p>
 </section>
 
 {% if item.broken_date or parts %}

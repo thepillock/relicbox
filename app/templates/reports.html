@@ -10,26 +10,26 @@
 <section class="stats">
   <div class="stat"><b>{{ collection.count }}</b><span>items ({{ collection.pieces }} pieces)</span></div>
   <div class="stat"><b>{{ collection.top_level }}</b><span>top-level items</span></div>
-  <div class="stat"><b>{{ collection.value|money }}</b><span>current value</span></div>
   <div class="stat"><b>{{ collection.cost|money }}</b><span>spent on them{% if collection.work %} (incl. {{ collection.work|money }} work){% endif %}</span></div>
+  <div class="stat"><b>{{ collection.value|money }}</b><span>valued at ({{ collection.valued }} of {{ collection.count }} items valued)</span></div>
   <div class="stat"><b>{{ collection.spares }}</b><span>harvested spares on the shelf</span></div>
 </section>
-<p class="hint">Value uses each item's latest valuation plus any work logged after it. Items never valued count at what they've cost (purchase + work). Parts inside an item are counted separately, so record a computer's value excluding parts you've listed inside it.</p>
+<p class="hint">Spent = purchase price + work log costs. Valued at = the latest valuation of each item that has one (for insurance), kept separate from spend. Parts inside an item are counted separately, so record a computer's value excluding parts you've listed inside it.</p>
 
 <div class="two">
 <section>
   <h3>Where it is</h3>
   <div class="tablewrap">
   <table class="data tree">
-    <thead><tr><th>Location</th><th class="num">Items</th><th class="num">Value</th></tr></thead>
+    <thead><tr><th>Location</th><th class="num">Items</th><th class="num">Spent</th><th class="num">Valued at</th></tr></thead>
     <tbody>
     {% for loc, depth in tree %}{% set s = stats.get(loc.id) %}
       {% if s %}
       <tr><td style="padding-left: {{ 0.6 + depth * 1.4 }}rem">{{ '└ ' if depth }}<a href="{{ url_for('location_view', loc_id=loc.id) }}">{{ loc.name }}</a></td>
-        <td class="num">{{ s.count }}</td><td class="num">{{ s.value|money }}</td></tr>
+        <td class="num">{{ s.count }}</td><td class="num">{{ s.cost|money }}</td><td class="num muted">{{ (s.value or none)|money('') }}</td></tr>
       {% endif %}
     {% endfor %}
-    {% if unassigned %}<tr><td class="muted">No location</td><td class="num">{{ unassigned.count }}</td><td class="num">{{ unassigned.value|money }}</td></tr>{% endif %}
+    {% if unassigned %}<tr><td class="muted">No location</td><td class="num">{{ unassigned.count }}</td><td class="num">{{ unassigned.cost|money }}</td><td class="num muted">{{ (unassigned.value or none)|money('') }}</td></tr>{% endif %}
     </tbody>
   </table>
   </div>
@@ -47,10 +47,10 @@
   {% if grouped %}
   <div class="tablewrap">
   <table class="data">
-    <thead><tr><th>Value</th><th class="num">Items</th><th class="num">Value</th></tr></thead>
+    <thead><tr><th>Value</th><th class="num">Items</th><th class="num">Spent</th><th class="num">Valued at</th></tr></thead>
     <tbody>
     {% for key, g in grouped %}
-      <tr><td>{{ key }}</td><td class="num">{{ g.count }}</td><td class="num">{{ g.value|money }}</td></tr>
+      <tr><td>{{ key }}</td><td class="num">{{ g.count }}</td><td class="num">{{ g.cost|money }}</td><td class="num muted">{{ (g.value or none)|money('') }}</td></tr>
     {% endfor %}
     </tbody>
   </table>

@@ -15,7 +15,7 @@
   <select name="location">{{ location_options(locations, loc or '', 'Any location') }}</select>
   <button>Filter</button>
 </form>
-<p class="muted summary">{{ rows|length }} item{{ '' if rows|length == 1 else 's' }} · {{ total_value|money }}
+<p class="muted summary">{{ rows|length }} item{{ '' if rows|length == 1 else 's' }} · {{ totals.cost|money }} spent{% if totals.valued %} · valued at {{ totals.value|money }} ({{ totals.valued }} valued){% endif %}
   · <a href="{{ url_for('labels', q=qtext, status=status, location=loc or '') }}">Print labels for these</a></p>
 {{ item_cards(rows) }}
 {% endblock %}

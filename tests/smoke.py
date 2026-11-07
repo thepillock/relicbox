@@ -153,31 +153,33 @@ def val600():
         return dict(_q("SELECT value, work_cost FROM items WHERE id = ?", (a600,), one=True))
 post(f"/items/{a600}/work", {"date": "2025-02-01", "description": "Recapped", "cost": "20"})
 post(f"/items/{a600}/work", {"date": "2025-03-01", "description": "Cleaned keyboard", "cost": ""})
-assert val600() == {"value": None, "work_cost": 20}          # not valued: totals use cost 120
+assert val600() == {"value": None, "work_cost": 20}
 html = ok(c.get(f"/items/{a600}")).data.decode()
-assert "Recapped" in html and "£120.00" in html and "not valued yet" in html
+assert "Recapped" in html and "Total spent" in html and "£120.00" in html and "none recorded" in html
 post(f"/items/{a600}/valuations", {"date": "2025-04-01", "value": "150", "source": "eBay sold"})
 post(f"/items/{a600}/valuations", {"date": "2025-03-15", "value": "130", "source": "older"})
 assert val600()["value"] == 150                               # latest by date wins
 post(f"/items/{a600}/work", {"date": "2025-05-01", "description": "New RF shield", "cost": "12.50"})
-assert val600() == {"value": 162.5, "work_cost": 32.5}       # work after valuation adds on
-post(f"/items/{a600}/work", {"date": "2025-04-01", "description": "Same day as valuation", "cost": "5"})
-assert val600()["value"] == 162.5                             # same-day work assumed included
+assert val600() == {"value": 150, "work_cost": 32.5}         # work never changes the valuation
 with _app.app_context():
     wid = _q("SELECT id FROM work_log WHERE description = 'New RF shield'", one=True)["id"]
     vid = _q("SELECT id FROM valuations WHERE value = 150", one=True)["id"]
-post(f"/work/{wid}/edit", {"date": "2025-05-01", "description": "New RF shield", "cost": "10"})
-assert val600()["value"] == 160
+post(f"/work/{wid}/edit", {"date": "2025-05-01", "description": "New RF shield", "cost": "5"})
+assert val600() == {"value": 150, "work_cost": 25}
 post(f"/valuations/{vid}/delete", {})
-assert val600()["value"] == 130 + 10 + 5                      # back to older valuation + work after it
+assert val600()["value"] == 130
 post(f"/work/{wid}/delete", {})
-assert val600() == {"value": 135, "work_cost": 25}
+assert val600() == {"value": 130, "work_cost": 20}
+post(f"/items/{a600}/work", {"date": "2025-05-02", "description": "Fan", "cost": "5"})
 html = ok(c.get(f"/items/{a600}")).data.decode()
-assert "Work log" in html and "Valuations" in html and "Total" in html
-# reports include work in cost and profit
+assert "Work log" in html and "Valuations" in html and "£125.00" in html
+# items list shows both running totals separately
+html = ok(c.get("/items?q=Amiga+600")).data.decode()
+assert "£125.00 spent" in html and "valued at £130.00" in html
+# profit = sale - (purchase + work), not affected by valuation
 post(f"/items/{a600}/dispose", {"kind": "sold", "price": "200", "date": "2025-06-01"})
 html = ok(c.get(f"/items/{a600}")).data.decode()
-assert "profit £75.00" in html                                # 200 - (100 + 25)
+assert "Profit" in html and "£75.00" in html                  # 200 - (100 + 25)
 ok(c.get("/reports")); ok(c.get("/reports?year=2025")); ok(c.get("/")); ok(c.get("/locations")); ok(c.get("/items"))
 
 # --- migration of an old database with plain values --------------------------------

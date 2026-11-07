@@ -7,7 +7,7 @@
 <div class="pagehead">
   <div><h1>{{ loc.name }}</h1>
     {% set s = stats.get(loc.id) %}
-    <div class="sub muted">{{ s.count if s else 0 }} items in here (including sub-locations) · {{ (s.value if s else 0)|money }}</div></div>
+    <div class="sub muted">{{ s.count if s else 0 }} items in here (including sub-locations) · {{ (s.cost if s else 0)|money }} spent{% if s and s.value %} · valued at {{ s.value|money }}{% endif %}</div></div>
   <div class="actions">
     <a class="btn primary" href="{{ url_for('item_new', location_id=loc.id) }}">+ Add item here</a>
     <a class="btn" href="{{ url_for('location_new', parent_id=loc.id) }}">+ Sub-location</a>

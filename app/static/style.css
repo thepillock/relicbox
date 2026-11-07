@@ -245,3 +245,4 @@ label.stacked textarea { font-size: 1rem; color: var(--ink); }
 table.data tr.current td { font-weight: 600; }
 .tablewrap + .addbox { margin-top: .6rem; }
 #work, #value { margin-bottom: 1.5rem; }
+.valline { margin: .8rem 0 0; }

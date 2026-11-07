@@ -321,7 +321,7 @@ def shell_value(donor):
 
 # --- value history and work log ------------------------------------------------
 def cost_basis(it):
-    """What an item has cost: purchase price plus logged work."""
+    """Actual spend on an item: purchase price plus logged work. Valuations are kept separate."""
     return (it["purchase_price"] or 0) + (it["work_cost"] or 0)
 
 
@@ -330,25 +330,19 @@ def known_cost(it):
     return cost_basis(it) if it["purchase_price"] is not None or it["work_cost"] else None
 
 
-def effective_value(it):
-    """Current value for totals: the latest valuation (plus later work), else what it has cost."""
-    return it["value"] if it["value"] is not None else cost_basis(it)
+def list_totals(rows):
+    """Running totals for a list of items: actual spend, and (separately) latest valuations."""
+    return {"cost": sum(cost_basis(r) for r in rows),
+            "value": sum(r["value"] or 0 for r in rows),
+            "valued": sum(1 for r in rows if r["value"] is not None)}
 
 
 def refresh_value(item_id):
-    """Recompute the cached items.value and items.work_cost from valuations and the work log.
-
-    Current value = latest valuation + cost of work dated after it. Work on the same day as a
-    valuation is taken to be included in that valuation. With no valuation, value is NULL and
-    totals fall back to purchase price + all work (see effective_value).
-    """
-    work = q("SELECT date, cost FROM work_log WHERE item_id = ?", (item_id,))
-    work_cost = sum(w["cost"] or 0 for w in work)
-    v = q("SELECT date, value FROM valuations WHERE item_id = ? ORDER BY date DESC, id DESC LIMIT 1",
+    """Recompute the cached items.value (latest valuation, or NULL) and items.work_cost (total work spend)."""
+    work_cost = q("SELECT COALESCE(SUM(cost), 0) AS t FROM work_log WHERE item_id = ?", (item_id,), one=True)["t"]
+    v = q("SELECT value FROM valuations WHERE item_id = ? ORDER BY date DESC, id DESC LIMIT 1",
           (item_id,), one=True)
-    value = None
-    if v:
-        value = v["value"] + sum(w["cost"] or 0 for w in work if w["date"] > v["date"])
+    value = v["value"] if v else None
     ex("UPDATE items SET value = ?, work_cost = ? WHERE id = ?", (value, work_cost, item_id))
 
 
@@ -463,7 +457,6 @@ def inject():
         "item_label": item_label,
         "label_format": setting("label_format", "qr"),
         "item_qr_url": item_qr_url,
-        "effective_value": effective_value,
         "cost_basis": cost_basis,
         "known_cost": known_cost,
         "app_version": APP_VERSION,
@@ -513,8 +506,8 @@ def index():
     stats = q("""SELECT
         SUM(status = 'active') AS active,
         SUM(CASE WHEN status = 'active' THEN quantity ELSE 0 END) AS pieces,
-        SUM(CASE WHEN status = 'active' THEN COALESCE(value, COALESCE(purchase_price, 0) + work_cost) ELSE 0 END)
-            AS value,
+        SUM(CASE WHEN status = 'active' THEN COALESCE(purchase_price, 0) + work_cost ELSE 0 END) AS cost,
+        SUM(CASE WHEN status = 'active' THEN COALESCE(value, 0) ELSE 0 END) AS value,
         SUM(status = 'sold') AS sold,
         SUM(CASE WHEN status = 'sold' THEN COALESCE(disposal_price, 0) ELSE 0 END) AS income,
         SUM(status = 'broken') AS broken
@@ -533,9 +526,8 @@ def items_list():
     status = request.args.get("status", "active")
     loc = int_or_none(request.args.get("location"))
     rows = decorate(search_items(qtext, status, loc))
-    total_value = sum(effective_value(r) for r in rows)
     return render_template("items.html", rows=rows, qtext=qtext, status=status, loc=loc,
-                           locations=location_tree(), total_value=total_value)
+                           locations=location_tree(), totals=list_totals(rows))
 
 
 def item_form_data(form, existing=None):
@@ -676,18 +668,17 @@ def item_view(item_id):
     donor = q("SELECT * FROM items WHERE id = ?", (item["harvested_from_id"],), one=True) \
         if item["harvested_from_id"] else None
     parts, part_totals = breakdown_summary(item_id)
-    contents_value = sum(effective_value(c) for c in contents if c["status"] == "active")
+    contents_cost = sum(cost_basis(c) for c in contents if c["status"] == "active")
     valuations = q("SELECT * FROM valuations WHERE item_id = ? ORDER BY date DESC, id DESC", (item_id,))
     work = q("SELECT * FROM work_log WHERE item_id = ? ORDER BY date DESC, id DESC", (item_id,))
     latest = valuations[0] if valuations else None
-    work_since = sum(w["cost"] or 0 for w in work if latest and w["date"] > latest["date"])
     sources = [r["source"] for r in q("SELECT DISTINCT source FROM valuations WHERE source IS NOT NULL "
                                       "AND source != 'Recorded before value history' ORDER BY 1")]
     return render_template("item_view.html", item=item, ancestors=ancestors, loc_path=loc_path,
                            contents=contents, photos=photos, descriptors=descriptors, donor=donor,
-                           parts=parts, part_totals=part_totals, contents_value=contents_value,
+                           parts=parts, part_totals=part_totals, contents_cost=contents_cost,
                            shell=shell_value(item), valuations=valuations, work=work, latest=latest,
-                           work_since=work_since, sources=sources, today=today())
+                           sources=sources, today=today())
 
 
 @app.route("/items/<int:item_id>/edit", methods=["GET", "POST"])
@@ -1151,7 +1142,7 @@ def lookup():
     if rows:
         return render_template("items.html", rows=decorate([dict(r) for r in rows]), qtext=code, status="all",
                                loc=None, locations=location_tree(),
-                               total_value=sum(effective_value(r) for r in rows))
+                               totals=list_totals(rows))
     return render_template("scan.html", not_found=code)
 
 
@@ -1170,18 +1161,19 @@ def location_stats():
     """Inclusive (count, pieces, value) for each location, from active items."""
     loc_by_id, _ = load_locations()
     items = {r["id"]: dict(r) for r in q("SELECT * FROM items")}
-    stats = defaultdict(lambda: {"count": 0, "pieces": 0, "value": 0.0, "direct": 0})
+    stats = defaultdict(lambda: {"count": 0, "pieces": 0, "cost": 0.0, "value": 0.0, "direct": 0})
     for it in items.values():
         if it["status"] != "active":
             continue
         lid = effective_location_id(it, items)
-        v = effective_value(it)
+        c, v = cost_basis(it), it["value"] or 0
         if lid not in loc_by_id:
             lid = None
         if lid is None:
             s = stats[None]
             s["count"] += 1
             s["pieces"] += it["quantity"]
+            s["cost"] += c
             s["value"] += v
             s["direct"] += 1
             continue
@@ -1190,6 +1182,7 @@ def location_stats():
             s = stats[loc["id"]]
             s["count"] += 1
             s["pieces"] += it["quantity"]
+            s["cost"] += c
             s["value"] += v
     return stats
 
@@ -1295,13 +1288,13 @@ def reports():
     items = {r["id"]: dict(r) for r in q("SELECT * FROM items")}
     loc_by_id, _ = load_locations()
 
-    val = effective_value
 
     active = [it for it in items.values() if it["status"] == "active"]
     collection = {
         "count": len(active),
         "pieces": sum(it["quantity"] for it in active),
-        "value": sum(val(it) for it in active),
+        "value": sum(it["value"] or 0 for it in active),
+        "valued": sum(1 for it in active if it["value"] is not None),
         "cost": sum(cost_basis(it) for it in active),
         "work": sum(it["work_cost"] or 0 for it in active),
         "top_level": sum(1 for it in active if not it["parent_id"]),
@@ -1313,11 +1306,12 @@ def reports():
     if group_by:
         dvals = {r["item_id"]: r["value"] for r in
                  q("SELECT item_id, value FROM item_descriptors WHERE descriptor_type_id = ?", (group_by,))}
-        g = defaultdict(lambda: {"count": 0, "value": 0.0})
+        g = defaultdict(lambda: {"count": 0, "cost": 0.0, "value": 0.0})
         for it in active:
             key = dvals.get(it["id"], "(not set)")
             g[key]["count"] += 1
-            g[key]["value"] += val(it)
+            g[key]["cost"] += cost_basis(it)
+            g[key]["value"] += it["value"] or 0
         grouped = sorted(g.items(), key=lambda kv: (-kv[1]["count"], kv[0].lower()))
 
     # Disposals
