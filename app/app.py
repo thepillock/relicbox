@@ -347,47 +347,46 @@ def part_transfers(part_id):
     return q("SELECT * FROM work_log WHERE part_id = ? ORDER BY date, id", (part_id,))
 
 
-def part_outcome(part, _depth=0):
-    """What happened to a harvested part, the income it brought its donor, and when.
+def part_flow(part):
+    """What happened to a part taken off an item, and what it means for that item.
 
-    Income is only real money or an internal price: a sale, or the price recorded when it was
-    fitted into one of your own items. Spares on the shelf, parts left inside, given away or
-    scrapped bring nothing (yet). A part broken down further passes on its own parts' income.
+    Returns (outcome, moved, income, date):
+      moved  - cost moved from the item to the part: the value given when it was kept as its own
+               item, or the internal price it was added to another item's work log at.
+      income - real money: what it sold for, if it was sold without being given a value first.
+    A part given a value keeps that as "moved"; anything it later sells for is its own profit or loss.
+    A part broken down further is a donor in its own right.
     """
     transfers = part_transfers(part["id"])
-    if transfers:
-        return "repair", sum(t["cost"] or 0 for t in transfers), transfers[-1]["date"]
+    moved = income = 0.0
     s = part["status"]
-    if s == "sold":
-        return "sold", part["disposal_price"] or 0.0, part["disposal_date"]
-    if s in ("given_away", "scrapped"):
-        return s, 0.0, part["disposal_date"]
-    if part["broken_date"] and _depth < 10:
-        _, totals = breakdown_summary(part["id"], _depth + 1)
-        return "broken", totals["income"], None
-    if part["parent_id"] and part["parent_id"] == part["harvested_from_id"]:
-        return "leave", 0.0, None
-    return "spare", 0.0, None  # its own item, on a shelf or inside another item
-
-
-def part_outcome_valued(part, _depth=0):
-    """part_outcome, except a part valued when it came off keeps that value as its donor's income,
-    whatever happens to it later (a later sale is that part's own profit or loss)."""
-    oc, income, date = part_outcome(part, _depth)
+    if transfers:
+        oc, moved, date = "repair", sum(t["cost"] or 0 for t in transfers), transfers[-1]["date"]
+    elif s == "sold":
+        oc, income, date = "sold", part["disposal_price"] or 0.0, part["disposal_date"]
+    elif s in ("given_away", "scrapped"):
+        oc, date = s, part["disposal_date"]
+    elif part["broken_date"]:
+        oc, date = "broken", part["broken_date"]
+    elif part["parent_id"] and part["parent_id"] == part["harvested_from_id"]:
+        oc, date = "leave", None
+    else:
+        oc, date = "spare", None  # its own item, on a shelf or inside another item
     if part["salvage_value"] is not None:
-        income = part["salvage_value"]
-    return oc, income, date
+        moved, income = part["salvage_value"], 0.0
+    return oc, moved, income, date
 
 
 # --- value history and work log ------------------------------------------------
 def cost_basis(it):
-    """Actual spend on an item: purchase price plus logged work. Valuations are kept separate."""
-    return (it["purchase_price"] or 0) + (it["work_cost"] or 0)
+    """Spend on an item: purchase price + logged work - cost moved to parts taken off it.
+    Valuations are kept separate."""
+    return (it["purchase_price"] or 0) + (it["work_cost"] or 0) - (it["moved_out"] or 0)
 
 
 def known_cost(it):
     """cost_basis, or None when nothing has been recorded (for display)."""
-    return cost_basis(it) if it["purchase_price"] is not None or it["work_cost"] else None
+    return cost_basis(it) if it["purchase_price"] is not None or it["work_cost"] or it["moved_out"] else None
 
 
 def list_totals(rows):
@@ -423,23 +422,25 @@ OUTCOME_LABELS = dict(PART_OUTCOMES, broken="Broken down further", leave="Still 
 
 
 def breakdown_summary(donor_id, _depth=0):
-    """Parts taken from a donor and the donor's income so far.
+    """Parts taken off an item, with the cost moved to them and the real income they brought.
 
-    A donor is treated like a sale whose price builds up part by part: income = what its parts
-    brought in (sales + internal prices) + what the shell sold for, if it was sold.
+    totals: moved (spare = kept as items with a value, repair = added to work logs), sold (parts sold),
+    shell (the item's own sale, if sold), income (sold + shell), finished, and n_<outcome> counts.
     """
     donor = q("SELECT * FROM items WHERE id = ?", (donor_id,), one=True)
     parts = q("SELECT * FROM items WHERE harvested_from_id = ? ORDER BY id", (donor_id,))
     rows, totals = [], defaultdict(float)
     for p in parts:
-        oc, income, date = part_outcome_valued(p, _depth)
+        oc, moved, income, date = part_flow(p)
         target = q("SELECT id, ref, name FROM items WHERE id = ?", (p["parent_id"],), one=True) \
             if oc in ("repair", "spare") and p["parent_id"] else None
-        rows.append({"part": p, "outcome": oc, "income": income, "date": date, "target": target})
-        totals[oc] += income
+        rows.append({"part": p, "outcome": oc, "moved": moved, "income": income, "date": date, "target": target})
+        totals["moved"] += moved
+        totals["moved_" + oc] += moved
+        totals["sold"] += income
         totals["n_" + oc] += 1
     totals["shell"] = (donor["disposal_price"] or 0.0) if donor and donor["status"] == "sold" else 0.0
-    totals["income"] = sum(r["income"] for r in rows) + totals["shell"]
+    totals["income"] = totals["sold"] + totals["shell"]
     totals["finished"] = bool(donor and donor["status"] in ("sold", "given_away", "scrapped"))
     return rows, totals
 
@@ -605,7 +606,7 @@ def index():
     stats = q("""SELECT
         SUM(status = 'active') AS active,
         SUM(CASE WHEN status = 'active' THEN quantity ELSE 0 END) AS pieces,
-        SUM(CASE WHEN status = 'active' THEN COALESCE(purchase_price, 0) + work_cost ELSE 0 END) AS cost,
+        SUM(CASE WHEN status = 'active' THEN COALESCE(purchase_price, 0) + work_cost - moved_out ELSE 0 END) AS cost,
         SUM(CASE WHEN status = 'active' THEN COALESCE(value, 0) ELSE 0 END) AS value,
         SUM(status = 'sold') AS sold,
         SUM(CASE WHEN status = 'sold' THEN COALESCE(disposal_price, 0) ELSE 0 END) AS income,
@@ -1153,8 +1154,8 @@ def part_add(item_id):
     """One part from the inline row on a donor's page: a new part, or one already recorded inside it."""
     donor = get_item(item_id)
     back = redirect(url_for("item_view", item_id=item_id) + "#parts")
-    if donor["status"] != "broken":
-        flash("Parts can only be added while the item is being broken for spares.", "error")
+    if donor["status"] not in ("active", "broken"):
+        flash("Parts can only be taken off items still in the collection or being broken for spares.", "error")
         return back
     f = request.form
     text, oc = (f.get("part") or "").strip(), f.get("outcome")
@@ -1595,14 +1596,14 @@ def reports():
         rows, totals = breakdown_summary(b["id"])
         b["nparts"] = len(rows)
         b["totals"] = totals
-        b["cost"] = cost_basis(b)
-        b["net"] = totals["income"] - b["cost"]
-        for k in ("sold", "repair", "broken", "shell", "income"):
+        b["cost"] = (b["purchase_price"] or 0) + (b["work_cost"] or 0)
+        b["moved"] = b["moved_out"] or 0
+        b["net"] = totals["income"] - cost_basis(b)
+        for k in ("sold", "shell", "income", "moved"):
             bt[k] += totals[k]
-        bt["spares"] += totals["n_spare"]
         bt["cost"] += b["cost"]
         bt["parts"] += len(rows)
-    bt["net"] = bt["income"] - bt["cost"]
+    bt["net"] = bt["income"] - (bt["cost"] - bt["moved"])
 
     # Purchases in range
     bought = [it for it in items.values() if it["purchase_date"] and not it["harvested_from_id"]

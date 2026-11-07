@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS ix_work_log_item ON work_log(item_id, date);
 """
 
 DEFAULT_SETTINGS = {
-    "schema_version": "5",
+    "schema_version": "6",
     "label_format": "qr",
     "public_url": "",
     "ref_prefix": "RC-",
@@ -161,7 +161,21 @@ def migrate(conn):
     # fixed income for the donor and the part's own cost.
     if "salvage_value" not in _columns(conn, "items"):
         conn.execute("ALTER TABLE items ADD COLUMN salvage_value REAL")
-    conn.execute("UPDATE settings SET value = '5' WHERE key = 'schema_version'")
+    # v6: cost moved from an item to parts taken off it (kept as items with a value, or added to another
+    # item's work log at an internal price). Spend = purchase + work - moved_out. Kept up to date on commit.
+    if "moved_out" not in _columns(conn, "items"):
+        conn.execute("ALTER TABLE items ADD COLUMN moved_out REAL NOT NULL DEFAULT 0")
+    refresh_moved_out(conn)
+    conn.execute("UPDATE settings SET value = '6' WHERE key = 'schema_version'")
+
+
+def refresh_moved_out(conn):
+    """Recompute items.moved_out: the value given to each part kept as its own item, or else the internal
+    prices it was added to other items' work logs at."""
+    conn.execute("""UPDATE items SET moved_out = COALESCE((
+        SELECT SUM(CASE WHEN p.salvage_value IS NOT NULL THEN p.salvage_value
+                        ELSE COALESCE((SELECT SUM(w.cost) FROM work_log w WHERE w.part_id = p.id), 0) END)
+        FROM items p WHERE p.harvested_from_id = items.id), 0)""")
 
 
 DISPOSED = ("sold", "given_away", "scrapped")
@@ -205,4 +219,5 @@ def ex(sql, args=()):
 
 
 def commit():
+    refresh_moved_out(get_db())
     get_db().commit()

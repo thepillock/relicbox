@@ -65,9 +65,10 @@ post(f"/items/{a1200}/breakdown", {
 r = ok(c.get(f"/items/{a1200}"))
 html = r.data.decode()
 assert "Breaking for spares" in html and "Added to work log of" in html and "Sold / charged to someone" in html
-# donor income = gayle internal price 15 + PSU sold 40; the keyboard spare earns nothing until used
-assert "£55.00" in html and "Loss so far" in html and "£25.00" in html   # 55 - 80
-assert "Kept as their own items, at the value given (1)" in html
+# gayle's £15 internal price moves cost off the donor (80 - 15 = 65); PSU sold for 40 is income
+assert "Moved to parts" in html and "£65.00" in html and "£40.00" in html
+assert "Loss so far" in html and "£25.00" in html   # 40 - 65
+assert "Kept as its own item" in html   # the keyboard: no value given, so no cost moved
 r = ok(c.get(f"/items/{a1200w}")); html = r.data.decode()
 assert "Gayle chip" in html and "Fitted Gayle chip (RC-00004, from RC-00003)" in html  # in work log
 assert "£165.00" in html                                                              # 150 + 15 internal price
@@ -80,7 +81,7 @@ with _app0.app_context():
 ok(c.get(f"/items/{kb}/fit"))
 post(f"/items/{kb}/fit", {"target": "RC-00001", "price": "20", "date": "2025-07-15"})
 html = ok(c.get(f"/items/{a1200}")).data.decode()
-assert "£75.00" in html and "Loss so far" in html and "£5.00" in html
+assert "£45.00" in html and "Loss so far" in html and "£5.00" in html   # spent 80 - 15 - 20 = 45; 40 - 45
 # bad target error
 r = post(f"/items/{a1200}/breakdown", {"row_existing_id": [""], "row_name": ["X"], "row_outcome": ["repair"],
         "row_value": [""], "row_location": [""], "row_target": ["nope"], "row_dest": [""], "row_desc": [""]})

@@ -108,18 +108,15 @@
 <p class="hint">A donor counts like a sale that builds up part by part: income is what its parts were sold or charged for, internal prices for parts fitted into your own items, and the shell's sale price. Figures are to date for donors started in this period.</p>
 <table class="totals">
   <tr><td>Donor items cost (purchase + work)</td><td>{{ bt.cost|money }}</td></tr>
-  <tr><td>Parts sold / charged</td><td>{{ bt.sold|money }}</td></tr>
-  <tr><td>Parts fitted into my items (internal price)</td><td>{{ bt.repair|money }}</td></tr>
-  {% if bt.broken %}<tr><td>From parts broken down further</td><td>{{ bt.broken|money }}</td></tr>{% endif %}
+  <tr><td>Cost moved to parts kept or used</td><td>−{{ bt.moved|money }}</td></tr>
+  <tr><td>Parts sold</td><td>{{ bt.sold|money }}</td></tr>
   <tr><td>Shells sold</td><td>{{ bt.shell|money }}</td></tr>
-  <tr class="net"><td>Income</td><td>{{ bt.income|money }}</td></tr>
   <tr class="net"><td>Net</td><td class="{{ 'pos' if bt.net >= 0 else 'neg' }}">{{ bt.net|money }}</td></tr>
-  {% if bt.spares %}<tr><td class="muted" colspan="2" style="text-align:left">{{ bt.spares|int }} part(s) still on the shelf as spares</td></tr>{% endif %}
 </table>
 {% if broken %}
 <div class="tablewrap">
 <table class="data">
-  <thead><tr><th>Started</th><th>Donor</th><th class="num">Parts</th><th class="num">Cost</th><th class="num">Income</th><th class="num">Net</th></tr></thead>
+  <thead><tr><th>Started</th><th>Donor</th><th class="num">Parts</th><th class="num">Cost</th><th class="num">Moved to parts</th><th class="num">Sold</th><th class="num">Net</th></tr></thead>
   <tbody>
   {% for b in broken %}
     <tr><td>{{ b.broken_date or '' }}</td>
@@ -127,6 +124,7 @@
         <div class="muted small">{{ 'finished' if b.totals.finished else 'still breaking' }}</div></td>
       <td class="num">{{ b.nparts }}</td>
       <td class="num">{{ b.cost|money('') }}</td>
+      <td class="num">{{ ('−' ~ (b.moved|money)) if b.moved else '' }}</td>
       <td class="num">{{ b.totals.income|money }}</td>
       <td class="num {{ 'pos' if b.net >= 0 else 'neg' }}">{{ b.net|money }}</td></tr>
   {% endfor %}

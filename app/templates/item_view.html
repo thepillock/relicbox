@@ -49,26 +49,27 @@
     </dl>
 
     <h3>Spend</h3>
+    {% set parts_income = part_totals.sold %}
     <table class="totals">
       <tr><td>Purchase</td><td>{{ item.purchase_price|money }}</td></tr>
       <tr><td>{% if work %}<a href="#work">Work done</a>{% else %}Work done{% endif %}{% if work %} ({{ work|length }} entr{{ 'y' if work|length == 1 else 'ies' }}){% endif %}</td><td>{{ item.work_cost|money }}</td></tr>
+      {% if item.moved_out %}<tr><td><a href="#parts">Moved to parts</a> ({{ (part_totals.n_spare + part_totals.n_repair)|int }})</td><td>−{{ item.moved_out|money }}</td></tr>{% endif %}
       <tr class="net"><td>Total spent</td><td>{{ cost_basis(item)|money }}</td></tr>
-      {% if item.broken_date %}
-      <tr><td><a href="#parts">Income from parts</a> ({{ parts|length }})</td><td>{{ (part_totals.income - part_totals.shell)|money }}</td></tr>
-      {% if item.status == 'sold' %}<tr><td>Shell sold for</td><td>{{ part_totals.shell|money }}</td></tr>{% endif %}
+      {% if parts_income or item.broken_date %}<tr><td><a href="#parts">Parts sold</a> ({{ part_totals.n_sold|int }})</td><td>{{ parts_income|money }}</td></tr>{% endif %}
+      {% if item.status == 'sold' %}<tr><td>{{ 'Shell sold for' if item.broken_date else 'Sold for' }}</td><td>{{ item.disposal_price|money }}</td></tr>{% endif %}
       {% set pl = part_totals.income - cost_basis(item) %}
-      <tr class="net"><td>{{ 'Profit' if pl >= 0 else 'Loss' }}{{ ' so far' if not part_totals.finished }}</td><td class="{{ 'pos' if pl >= 0 else 'neg' }}">{{ pl|abs|money }}</td></tr>
-      {% elif item.status == 'sold' %}
-      <tr><td>Sold for</td><td>{{ item.disposal_price|money }}</td></tr>
-      {% if item.disposal_price is not none and (not item.harvested_from_id or item.salvage_value is not none) %}
-      {% set pl = item.disposal_price - cost_basis(item) %}
-      <tr class="net"><td>{{ 'Profit' if pl >= 0 else 'Loss' }}</td><td class="{{ 'pos' if pl >= 0 else 'neg' }}">{{ pl|abs|money }}</td></tr>
-      {% endif %}{% endif %}
+      {% if item.broken_date or (item.status == 'sold' and item.disposal_price is not none) %}
+        {% if item.broken_date or not item.harvested_from_id or item.salvage_value is not none %}
+        <tr class="net"><td>{{ 'Profit' if pl >= 0 else 'Loss' }}{{ ' so far' if not part_totals.finished }}</td><td class="{{ 'pos' if pl >= 0 else 'neg' }}">{{ pl|abs|money }}</td></tr>
+        {% endif %}
+      {% elif parts_income %}
+        <tr class="net"><td>Net cost so far</td><td>{{ (cost_basis(item) - parts_income)|money }}</td></tr>
+      {% endif %}
     </table>
     {% if contents_cost %}<p class="hint">Plus {{ contents_cost|money }} spent on the parts recorded inside it.</p>{% endif %}
-    {% if item.broken_date and not part_totals.finished %}<p class="hint">Breaking for spares: income builds up as parts are sold or fitted. Use “Finished: dispose of shell” when nothing more will come off it.</p>{% endif %}
-    {% if item.harvested_from_id and item.salvage_value is not none %}<p class="hint">Valued at {{ item.salvage_value|money }} when it came off its donor: that's its cost here and income for the donor. If you sell it, the profit or loss is this item's own.</p>
-    {% elif item.harvested_from_id %}<p class="hint">No value was given when it came off its donor, so it has no cost of its own. What it brings in counts as the donor's income.</p>{% endif %}
+    {% if item.broken_date and not part_totals.finished %}<p class="hint">Breaking for spares: parts you keep or use move part of its cost onto them, and parts you sell bring in income. Use “Finished: dispose of shell” when nothing more will come off it.</p>{% endif %}
+    {% if item.harvested_from_id and item.salvage_value is not none %}<p class="hint">{{ item.salvage_value|money }} of its donor's cost was moved onto it when it came off. If you sell it, the profit or loss is this item's own.</p>
+    {% elif item.harvested_from_id %}<p class="hint">No value was given when it came off its donor, so it has no cost of its own. If it's sold, the money counts for the donor.</p>{% endif %}
 
     {% if not item.broken_date and (latest or item.status == 'active') %}
     <p class="valline"><span class="muted">Valuation</span>
@@ -210,18 +211,18 @@
 </section>
 {% endif %}
 
-{% set can_part = item.status == 'broken' %}
-{% if is_donor or parts %}
+{% set can_part = item.status in ('active', 'broken') %}
+{% if is_donor or parts or item.status == 'active' %}
 <section id="parts" class="ledger-section">
   <div class="ledger-head">
-    <h2>Parts taken off{% if parts %} <small class="muted">{{ parts|length }} · {{ (part_totals.income - part_totals.shell)|money }} income{{ ' · finished' if part_totals.finished }}</small>{% endif %}</h2>
-    {% if can_part %}<button type="button" class="btn small" data-add>+ Add part</button>{% endif %}
+    <h2>Parts taken off{% if parts %} <small class="muted">{{ parts|length }}{% if item.moved_out %} · {{ item.moved_out|money }} moved{% endif %}{% if part_totals.sold %} · {{ part_totals.sold|money }} sold{% endif %}{{ ' · finished' if part_totals.finished }}</small>{% endif %}</h2>
+    {% if can_part %}<button type="button" class="btn small" data-add>+ {{ 'Add part' if item.broken_date else 'Take a part off' }}</button>{% endif %}
   </div>
   <form id="part-new" method="post" action="{{ url_for('part_add', item_id=item.id) }}"></form>
   <datalist id="inside-donor">{% for c in inside_donor %}<option value="{{ c.ref }} — {{ c.name }}">{% endfor %}</datalist>
   <div class="tablewrap" {{ 'hidden' if not parts }}>
   <table class="data ledger parts">
-    <thead><tr><th class="c-date">Date</th><th>Part</th><th>What happened</th><th class="num c-amt">Income</th><th class="c-act"></th></tr></thead>
+    <thead><tr><th class="c-date">Date</th><th>Part</th><th>What happened</th><th class="num c-amt">Cost moved</th><th class="num c-amt">Sold for</th><th class="c-act"></th></tr></thead>
     <tbody>
       {% for r in parts %}
       <tr class="view-row">
@@ -230,7 +231,8 @@
         <td><span class="oc oc-{{ r.outcome }}">{{ OUTCOME_LABELS[r.outcome] }}</span>
           {% if r.target %} → <a href="{{ url_for('item_view', item_id=r.target.id) }}">{{ r.target.ref }} {{ r.target.name }}</a>{% endif %}
           {% if r.outcome in ('sold', 'given_away') and r.part.disposal_destination %} → {{ r.part.disposal_destination }}{% endif %}</td>
-        <td class="num">{{ r.income|money if r.income or r.outcome in ('sold', 'repair', 'broken') else '' }}</td>
+        <td class="num">{{ r.moved|money if r.moved else '' }}</td>
+        <td class="num">{{ r.income|money if r.income or (r.outcome == 'sold' and r.part.salvage_value is none) else '' }}</td>
         <td class="row-actions">{% if r.outcome == 'spare' %}<a class="link small" href="{{ url_for('item_fit', item_id=r.part.id) }}">Fit</a>{% endif %}</td>
       </tr>
       {% endfor %}
@@ -249,16 +251,16 @@
           <input form="part-new" name="target" class="d-target item-picker" list="item-options" autocomplete="off" placeholder="Fitted into (ref or name)" aria-label="Other item">
           <input form="part-new" name="dest" class="d-dest" placeholder="To whom" aria-label="To whom">
         </div></td>
-        <td><input form="part-new" name="value" class="d-amount" inputmode="decimal" aria-label="Amount" placeholder="{{ currency }}"></td>
+        <td colspan="2"><input form="part-new" name="value" class="d-amount" inputmode="decimal" aria-label="Amount" placeholder="{{ currency }}"></td>
         <td class="row-actions"><button form="part-new" class="btn small primary">Save</button> <button type="button" class="link" data-cancel>Cancel</button></td>
       </tr>
     </tbody>
     {% if parts %}
     <tfoot>
-      <tr><td colspan="3">Sold / charged ({{ part_totals.n_sold|int }})</td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>
-      <tr><td colspan="3">Added to other items' work logs, internal price ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.repair|money }}</td><td></td></tr>
-      {% if part_totals.n_broken %}<tr><td colspan="3">From parts broken down further ({{ part_totals.n_broken|int }})</td><td class="num">{{ part_totals.broken|money }}</td><td></td></tr>{% endif %}
-      {% if part_totals.n_spare %}<tr><td colspan="3">Kept as their own items, at the value given ({{ part_totals.n_spare|int }})</td><td class="num">{{ part_totals.spare|money }}</td><td></td></tr>{% endif %}
+      {% if part_totals.moved_spare %}<tr><td colspan="3">Kept as their own items ({{ part_totals.n_spare|int }})</td><td class="num">{{ part_totals.moved_spare|money }}</td><td></td><td></td></tr>{% endif %}
+      {% if part_totals.moved_repair %}<tr><td colspan="3">Added to other items' work logs ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.moved_repair|money }}</td><td></td><td></td></tr>{% endif %}
+      {% if part_totals.sold %}<tr><td colspan="3">Sold ({{ part_totals.n_sold|int }})</td><td></td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>{% endif %}
+      <tr class="net-row"><td colspan="3">Total</td><td class="num">{{ part_totals.moved|money }}</td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>
     </tfoot>
     {% endif %}
   </table>

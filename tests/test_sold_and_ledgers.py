@@ -64,6 +64,8 @@ post(f"/valuations/{vid}/edit", {"date": "2026-11-03", "value": "275", "source":
 html = c.get(f"/items/{item}").data.decode()
 assert "Recapped" in html and "£275.00" in html and "Dealer" in html and row(item)["value"] == 275
 
+def spend(i): r = row(i); return (r["purchase_price"] or 0) + (r["work_cost"] or 0) - (r["moved_out"] or 0)
+
 # 6. donor: no work/valuation sections when empty; parts added inline
 donor = new_item(name="Dead CD32", location_id=box, purchase_price="60")
 inside = new_item(name="Akiko chip", parent=row(donor)["ref"])
@@ -78,11 +80,16 @@ post(f"/items/{donor}/parts", {"part": "Floppy drive", "outcome": "repair", "val
 r = post(f"/items/{donor}/parts", {"part": "Lid", "outcome": "repair", "target": "nonsense"})
 assert b"Couldn" in r.data
 html = c.get(f"/items/{donor}").data.decode()
-assert "PSU" in html and "Floppy drive" in html and "£35.00 income" in html
+assert "PSU" in html and "Floppy drive" in html and "£15.00 moved" in html and "£20.00 sold" in html
 con = sqlite3.connect(DB); sold_psu = con.execute("SELECT location_id, former_location_id FROM items WHERE name = 'PSU'").fetchone(); con.close()
 assert sold_psu == (None, box), sold_psu
 assert b"Fitted Floppy drive" in c.get(f"/items/{item}").data
-r = post(f"/items/{item}/parts", {"part": "X", "outcome": "spare"}); assert b"only be added while" in r.data
+# parts can come off a working item without breaking it: its spend drops by the value moved
+before = spend(item)
+post(f"/items/{item}/parts", {"part": "Spare mouse", "outcome": "spare", "value": "10", "location": shelf})
+assert row(item)["status"] == "active" and abs(spend(item) - (before - 10)) < 0.001
+r = post(f"/items/{a500}/dispose", {"kind": "sold", "price": "1"})
+r = post(f"/items/{a500}/parts", {"part": "X", "outcome": "spare"}); assert b"only be taken off items still" in r.data
 print("ALL OK")
 
 # 7. location page: contents drop down under their container, any depth; no valuations in lists
@@ -118,7 +125,6 @@ html = c.get(f"/items/{mon_b}").data.decode()
 assert "Profit" in html and "£5.50" in html                         # 15 + 30 - 39.50
 assert "Kept as its own item" in html and "Monitor A" in html
 # whole picture = real cash: 114.50 out, 30 back
-def spend(i): r = row(i); return (r["purchase_price"] or 0) + (r["work_cost"] or 0)
 net = (15 + 30 - 39.50) - spend(mon_a) - spend(stand["id"])
 assert abs(net - (30 - 114.50)) < 0.001, net
 # selling the stand later is the stand's own profit; the donor keeps its 15

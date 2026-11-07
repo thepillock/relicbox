@@ -18,9 +18,9 @@ Python/Flask + SQLite, one container, no external services. Everything (database
 - **Work log**: a dated entry for each repair or job, with what was done and what it cost. The item page shows the spend: purchase + work = total spent, and the sale price and profit once sold.
 - **Valuations**: a separate, dated record of what each item is worth (e.g. for insurance), each with a source. They don't affect spend or profit; lists and reports show them as their own total.
 - **Sold / given away / scrapped**: date, price and destination. Optionally the contents go with the item. The item leaves its location and is listed under **Sold** on the Locations page. Sold isn't a real location, so only recording a sale puts things there. **Back in collection** returns it to where it was.
-- **Breaking for spares**: a donor leaves the collection and is treated like a sale whose price builds up part by part. List the parts as you take them off. Each part becomes its own item (with a reference number and a link back to the donor) and has one of these outcomes:
-  - *Create new item or subitem*: becomes its own item, in a location or inside another item. Give it an optional value: that's fixed income for the donor and the new item's cost, so if you sell it later the profit or loss is the part's own. With no value it earns the donor nothing until it's sold or fitted.
-  - *Add to work log of another item*: gets nested inside that item and logged in its work log, with an optional internal price. That price is income for the donor and a work cost on the other item.
+- **Taking parts off**: parts can come off any item: a working one (**Take a part off**) or one marked **Breaking for spares**, which leaves the collection. List the parts as you take them off. Each part becomes its own item (with a reference number and a link back to the donor) and has one of these outcomes:
+  - *Create new item or subitem*: becomes its own item, in a location or inside another item. An optional value moves that much cost from the item it came off onto the new item, so if you sell it later the profit or loss is the part's own.
+  - *Add to work log of another item*: gets nested inside that item and logged in its work log, with an optional internal price. That price moves from the item it came off into the other item's work cost.
   - *Sold / charged to someone*: records the price and who to.
   - *Given away / scrapped*.
   
@@ -107,11 +107,12 @@ Reference prefix/digits, currency symbol, site name and descriptors are set in *
 
 Spend and valuations are two separate running totals:
 
-- **Spent** = purchase price + all work log costs. Profit on a sale is the sale price minus this.
+- **Spent** = purchase price + work log costs − cost moved to parts taken off it. Profit on a sale is the sale price minus this.
 - **Valued at** = the latest valuation of each item that has one. Items without a valuation add nothing. Parts listed inside an item are valued separately, so value a computer without the parts you've listed inside it.
-- **Donor income** = what its parts were sold or charged for + internal prices of parts fitted into your own items + what the shell sold for. A part broken down further passes on its own parts' income. Spares still on the shelf count for nothing until used.
-- **Donor net** = donor income − what the donor cost (purchase + work). It shows as "so far" until the donor is finished.
-- A harvested part has no spend of its own unless it was given a value when it came off (then that value is its cost). An internal price makes it a work cost on the item it was fitted into. Either way the same amount is income for the donor, so the totals always match the real money in and out.
+- **Moving cost to parts**: when a part comes off an item (working or being broken for spares) and you keep it as its own item with a value, or add it to another item's work log at an internal price, that amount moves from the item to the part. A £100 item with a £25 part taken off shows £75 spent, and the part £25. The purchase price stays at what you actually paid.
+- **Income** only ever means real money: parts sold, and the item's own sale price.
+- **Donor net** = income − spent. It shows as "so far" until the donor is finished. The totals always match the real money in and out.
+- A part with no value given has no cost of its own; if it's sold, the money counts for the item it came off.
 - New parts copy the donor's purchase date and get a "Salvaged from …" note. They aren't counted as purchases in reports.
 
 ## Backups
