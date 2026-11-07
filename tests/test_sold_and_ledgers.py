@@ -101,3 +101,40 @@ for page in (f"/locations/{loc}", "/locations", "/items", "/"):
     assert "£999.00" not in c.get(page).data.decode(), page
 assert "£999.00" in c.get(f"/items/{pc}").data.decode()
 print("ALL OK (tree)")
+
+# 8. parts kept as their own items: value, date and notes; work-log option; your monitor example
+mon_a = new_item(name="Monitor A", location_id=shelf, purchase_price="75")
+mon_b = new_item(name="Monitor B", location_id=shelf, purchase_price="39.50", purchase_date="2023-09-29")
+post(f"/items/{mon_b}/breakdown", {"date": "2026-11-07", "mark_broken": "1"})
+r = post(f"/items/{mon_b}/parts", {"date": "2026-11-07", "part": "Tilt/swivel stand", "outcome": "spare",
+                                    "value": "15", "target": row(mon_a)["ref"]})
+con = sqlite3.connect(DB); con.row_factory = sqlite3.Row
+stand = con.execute("SELECT * FROM items WHERE name = 'Tilt/swivel stand'").fetchone(); con.close()
+assert stand["parent_id"] == mon_a and stand["purchase_price"] == 15 and stand["salvage_value"] == 15
+assert stand["purchase_date"] == "2023-09-29"                       # copied from the donor
+assert stand["notes"].startswith(f"Salvaged from {row(mon_b)['ref']} Monitor B on 2026-11-07")
+post(f"/items/{mon_b}/dispose", {"kind": "sold", "price": "30"})
+html = c.get(f"/items/{mon_b}").data.decode()
+assert "Profit" in html and "£5.50" in html                         # 15 + 30 - 39.50
+assert "Kept as its own item" in html and "Monitor A" in html
+# whole picture = real cash: 114.50 out, 30 back
+def spend(i): r = row(i); return (r["purchase_price"] or 0) + (r["work_cost"] or 0)
+net = (15 + 30 - 39.50) - spend(mon_a) - spend(stand["id"])
+assert abs(net - (30 - 114.50)) < 0.001, net
+# selling the stand later is the stand's own profit; the donor keeps its 15
+post(f"/items/{stand['id']}/dispose", {"kind": "sold", "price": "22"})
+assert "£5.50" in c.get(f"/items/{mon_b}").data.decode()
+assert b"Profit" in c.get(f"/items/{stand['id']}").data and b"\xc2\xa37.00" in c.get(f"/items/{stand['id']}").data
+# "add to work log of another item": date mirrored onto the log, cost on that item
+d2 = new_item(name="Donor 2", location_id=shelf, purchase_price="10", purchase_date="2024-01-01")
+post(f"/items/{d2}/breakdown", {"date": "2026-11-07", "mark_broken": "1"})
+post(f"/items/{d2}/parts", {"date": "2026-10-01", "part": "Fuse", "outcome": "repair", "value": "2", "target": row(mon_a)["ref"]})
+con = sqlite3.connect(DB)
+assert con.execute("SELECT date, cost FROM work_log WHERE description LIKE 'Fitted Fuse%'").fetchone() == ("2026-10-01", 2.0)
+fuse = con.execute("SELECT purchase_date, purchase_price FROM items WHERE name = 'Fuse'").fetchone(); con.close()
+assert fuse == ("2024-01-01", None)                                # date copied, cost lives in the work log
+# harvested parts aren't counted as purchases in reports
+assert "Harvested from item" not in c.get(f"/items/{stand['id']}/edit").data.decode()
+post(f"/items/{stand['id']}/edit", {"name": "Tilt/swivel stand", "status": "sold", "disposal_price": "22"})
+assert row(stand["id"])["harvested_from_id"] == mon_b               # link kept after editing
+print("ALL OK (parts)")

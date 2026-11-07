@@ -81,12 +81,17 @@ document.querySelectorAll('input[data-autosubmit]').forEach(inp =>
     if (!sel) return;
     row.dataset.outcome = sel.value;
     const target = row.querySelector('.d-target');
-    if (target) target.required = sel.value === 'repair';
+    if (target) {
+      target.required = sel.value === 'repair';
+      target.placeholder = sel.value === 'repair' ? 'Add to work log of (ref or name)' : 'Or inside item (optional)';
+    }
     const amt = row.querySelector('.d-amount');
     if (amt) {
-      amt.placeholder = (document.body.dataset.currency || '') + ' price';
-      amt.title = sel.value === 'repair' ? 'Internal price (optional): counts as income for the donor and a cost for the repaired item'
-                                         : 'What it sold for';
+      const cur = document.body.dataset.currency || '';
+      amt.placeholder = cur + (sel.value === 'spare' ? ' value' : ' price');
+      amt.title = sel.value === 'repair' ? 'Internal price (optional): a work cost on that item and income for the donor'
+                : sel.value === 'spare' ? 'Value (optional): the new item\'s cost and income for the donor'
+                : 'What it sold for';
     }
   };
   function openAdd(sec) {

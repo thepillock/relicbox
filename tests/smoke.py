@@ -56,7 +56,7 @@ post(f"/items/{a1200}/breakdown", {
     "row_existing_id": [str(gayle), "", "", "", ""],
     "row_name": ["Gayle chip", "PSU", "Keyboard", "Case top", ""],
     "row_outcome": ["repair", "sold", "spare", "scrapped", "spare"],
-    "row_value": ["15", "40", "30", "", ""],
+    "row_value": ["15", "40", "", "", ""],
     "row_location": ["", "", "2", "", ""],
     "row_target": ["RC-00005 — Amiga 1200 (working)", "", "", "", ""],
     "row_dest": ["", "eBay buyer", "", "", ""],
@@ -64,10 +64,10 @@ post(f"/items/{a1200}/breakdown", {
 })
 r = ok(c.get(f"/items/{a1200}"))
 html = r.data.decode()
-assert "Breaking for spares" in html and "Fitted into another item" in html and "Sold / charged to someone" in html
+assert "Breaking for spares" in html and "Added to work log of" in html and "Sold / charged to someone" in html
 # donor income = gayle internal price 15 + PSU sold 40; the keyboard spare earns nothing until used
 assert "£55.00" in html and "Loss so far" in html and "£25.00" in html   # 55 - 80
-assert "Still on the shelf as spares (1)" in html
+assert "Kept as their own items, at the value given (1)" in html
 r = ok(c.get(f"/items/{a1200w}")); html = r.data.decode()
 assert "Gayle chip" in html and "Fitted Gayle chip (RC-00004, from RC-00003)" in html  # in work log
 assert "£165.00" in html                                                              # 150 + 15 internal price
@@ -84,7 +84,7 @@ assert "£75.00" in html and "Loss so far" in html and "£5.00" in html
 # bad target error
 r = post(f"/items/{a1200}/breakdown", {"row_existing_id": [""], "row_name": ["X"], "row_outcome": ["repair"],
         "row_value": [""], "row_location": [""], "row_target": ["nope"], "row_dest": [""], "row_desc": [""]})
-assert b"find the item it repaired" in r.data
+assert b"find the item" in r.data
 
 # sell the A500 whole
 post(f"/items/{a500}/dispose", {"kind": "sold", "date": "2025-08-01", "price": "200", "destination": "Facebook", "with_contents": "1"})

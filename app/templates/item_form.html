@@ -68,8 +68,8 @@
   </fieldset>
 
   {% if item %}
-  <details {{ 'open' if (f.status and f.status != 'active') or f.harvested_from }}>
-    <summary>Status, disposal &amp; provenance</summary>
+  <details {{ 'open' if (f.status and f.status != 'active') }}>
+    <summary>Status &amp; disposal</summary>
     <fieldset>
       <div class="grid">
         <label>Status<select name="status">
@@ -79,7 +79,6 @@
         <label>Sale price ({{ currency }})<input name="disposal_price" inputmode="decimal" value="{{ f.disposal_price|num if f.disposal_price is not none else '' }}"></label>
         <label>Sold / given to<input name="disposal_destination" value="{{ f.disposal_destination or '' }}"></label>
         <label>Broken for spares on<input type="date" name="broken_date" value="{{ f.broken_date or '' }}"></label>
-        <label>Harvested from item<input name="harvested_from" class="item-picker" list="item-options" value="{{ f.harvested_from or '' }}" autocomplete="off" placeholder="donor ref"></label>
       </div>
     </fieldset>
   </details>

@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS ix_work_log_item ON work_log(item_id, date);
 """
 
 DEFAULT_SETTINGS = {
-    "schema_version": "4",
+    "schema_version": "5",
     "label_format": "qr",
     "public_url": "",
     "ref_prefix": "RC-",
@@ -157,7 +157,11 @@ def migrate(conn):
         if col not in _columns(conn, "items"):
             conn.execute(f"ALTER TABLE items ADD COLUMN {col} INTEGER")
     move_out_disposed(conn)
-    conn.execute("UPDATE settings SET value = '4' WHERE key = 'schema_version'")
+    # v5: a part kept as its own item can be given a value when it comes off the donor. That value is
+    # fixed income for the donor and the part's own cost.
+    if "salvage_value" not in _columns(conn, "items"):
+        conn.execute("ALTER TABLE items ADD COLUMN salvage_value REAL")
+    conn.execute("UPDATE settings SET value = '5' WHERE key = 'schema_version'")
 
 
 DISPOSED = ("sold", "given_away", "scrapped")

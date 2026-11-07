@@ -12,15 +12,15 @@
         {% if r.outcome in ('sold', 'given_away') and r.part.disposal_destination %} → {{ r.part.disposal_destination }}{% endif %}
         {% if r.date %} <span class="muted">{{ r.date }}</span>{% endif %}
       </td>
-      <td class="num">{{ r.income|money if r.outcome in ('sold', 'repair', 'broken') else '' }}</td>
+      <td class="num">{{ r.income|money if r.income or r.outcome in ('sold', 'repair', 'broken') else '' }}</td>
     </tr>
   {% endfor %}
   </tbody>
   <tfoot>
     <tr><td colspan="3">Parts sold / charged ({{ part_totals.n_sold|int }})</td><td class="num">{{ part_totals.sold|money }}</td></tr>
-    <tr><td colspan="3">Fitted into my items, internal price ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.repair|money }}</td></tr>
+    <tr><td colspan="3">Added to other items' work logs, internal price ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.repair|money }}</td></tr>
     {% if part_totals.n_broken %}<tr><td colspan="3">From parts broken down further ({{ part_totals.n_broken|int }})</td><td class="num">{{ part_totals.broken|money }}</td></tr>{% endif %}
-    {% if part_totals.n_spare %}<tr><td colspan="3" class="muted">Still on the shelf as spares ({{ part_totals.n_spare|int }})</td><td></td></tr>{% endif %}
+    {% if part_totals.n_spare %}<tr><td colspan="3">Kept as their own items, at the value given ({{ part_totals.n_spare|int }})</td><td class="num">{{ part_totals.spare|money }}</td></tr>{% endif %}
   </tfoot>
 </table>
 </div>

@@ -20,12 +20,12 @@
         {% endfor %}
       </select>
     </label>
-    <label class="f-value"><span><span class="lbl-value">Internal price (optional)</span><span class="lbl-price">Charged</span> ({{ currency }})</span>
+    <label class="f-value"><span><span class="lbl-value">Internal price (optional)</span><span class="lbl-spare">Value (optional)</span><span class="lbl-price">Charged</span> ({{ currency }})</span>
       <input name="row_value" inputmode="decimal" value="{{ r.value }}"></label>
     <label class="f-spare">Store in
       <select name="row_location">{{ location_options(locations, r.location or '', 'Same place as donor') }}</select></label>
-    <label class="f-repair">Fitted into item
-      <input name="row_target" class="item-picker" list="item-options" value="{{ r.target }}" placeholder="ref or name of repaired item" autocomplete="off"></label>
+    <label class="f-repair"><span class="lbl-repair">Add to the work log of</span><span class="lbl-spare">Or inside item (optional)</span>
+      <input name="row_target" class="item-picker" list="item-options" value="{{ r.target }}" placeholder="ref or name" autocomplete="off"></label>
     <label class="f-dest">Sold / given to<input name="row_dest" value="{{ r.dest }}"></label>
     <label class="f-desc wide">Notes<input name="row_desc" value="{{ r.desc }}"></label>
   </div>

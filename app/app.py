@@ -67,8 +67,8 @@ STATUSES = {
 }
 PART_OUTCOMES = {
     "leave": "Leave inside",
-    "spare": "Keep as spare",
-    "repair": "Fitted into one of my items",
+    "spare": "Create new item or subitem",
+    "repair": "Add to work log of another item",
     "sold": "Sold / charged to someone",
     "given_away": "Given away",
     "scrapped": "Scrapped",
@@ -365,11 +365,18 @@ def part_outcome(part, _depth=0):
     if part["broken_date"] and _depth < 10:
         _, totals = breakdown_summary(part["id"], _depth + 1)
         return "broken", totals["income"], None
-    if part["parent_id"] and part["parent_id"] != part["harvested_from_id"]:
-        return "repair", 0.0, None
-    if part["parent_id"]:
+    if part["parent_id"] and part["parent_id"] == part["harvested_from_id"]:
         return "leave", 0.0, None
-    return "spare", 0.0, None
+    return "spare", 0.0, None  # its own item, on a shelf or inside another item
+
+
+def part_outcome_valued(part, _depth=0):
+    """part_outcome, except a part valued when it came off keeps that value as its donor's income,
+    whatever happens to it later (a later sale is that part's own profit or loss)."""
+    oc, income, date = part_outcome(part, _depth)
+    if part["salvage_value"] is not None:
+        income = part["salvage_value"]
+    return oc, income, date
 
 
 # --- value history and work log ------------------------------------------------
@@ -412,7 +419,7 @@ def add_valuation(item_id, value, date=None, source=None, only_if_changed=False)
 
 
 OUTCOME_LABELS = dict(PART_OUTCOMES, broken="Broken down further", leave="Still inside donor",
-                      repair="Fitted into another item")
+                      repair="Added to work log of", spare="Kept as its own item")
 
 
 def breakdown_summary(donor_id, _depth=0):
@@ -425,9 +432,9 @@ def breakdown_summary(donor_id, _depth=0):
     parts = q("SELECT * FROM items WHERE harvested_from_id = ? ORDER BY id", (donor_id,))
     rows, totals = [], defaultdict(float)
     for p in parts:
-        oc, income, date = part_outcome(p, _depth)
+        oc, income, date = part_outcome_valued(p, _depth)
         target = q("SELECT id, ref, name FROM items WHERE id = ?", (p["parent_id"],), one=True) \
-            if oc == "repair" and p["parent_id"] else None
+            if oc in ("repair", "spare") and p["parent_id"] else None
         rows.append({"part": p, "outcome": oc, "income": income, "date": date, "target": target})
         totals[oc] += income
         totals["n_" + oc] += 1
@@ -666,6 +673,9 @@ def item_form_data(form, existing=None):
     if existing and existing["status"] in DISPOSED and data["status"] in DISPOSED:
         data["parent_id"], data["location_id"] = existing["parent_id"], existing["location_id"]
 
+    if "harvested_from" not in form:  # not on the form any more: keep the existing donor link
+        data["harvested_from_id"] = existing["harvested_from_id"] if existing else None
+        return data, errors
     hv_text = (form.get("harvested_from") or "").strip()
     hv = resolve_item(hv_text) if hv_text else None
     if hv_text and not hv:
@@ -1001,6 +1011,9 @@ def item_fit(item_id):
             ex("UPDATE items SET parent_id = ?, location_id = NULL, status = 'active', updated_at = ? WHERE id = ?",
                (target["id"], now(), item_id))
             record_fit(item_id, target, parse_money(request.form.get("price")), date, clean(request.form.get("notes")))
+            if part["purchase_price"] is not None and part["harvested_from_id"]:
+                # its cost is now on the repaired item's work log; don't count it twice
+                ex("UPDATE items SET purchase_price = NULL WHERE id = ?", (item_id,))
             commit()
             flash(f"Fitted into {target['ref']} — {target['name']}", "ok")
             return redirect(url_for("item_view", item_id=target["id"]) + "#work")
@@ -1011,7 +1024,14 @@ def item_fit(item_id):
 
 # --- breakdown for spares ---------------------------------------------------
 def apply_part(donor_id, donor_loc, existing, oc, r, target, date):
-    """Record one part taken off a donor (new, or one already recorded inside it)."""
+    """Record one part taken off a donor (new, or one already recorded inside it).
+
+    spare  -> its own item, in a location or inside another item (a subitem). An optional value is
+              fixed income for the donor and the new item's cost.
+    repair -> fitted as a repair: nested in the target and added to its work log, with any
+              internal price as a work cost there and income for the donor.
+    """
+    donor = q("SELECT * FROM items WHERE id = ?", (donor_id,), one=True)
     val = parse_money(r["value"])
     fields = {
         "harvested_from_id": donor_id,
@@ -1021,10 +1041,18 @@ def apply_part(donor_id, donor_loc, existing, oc, r, target, date):
         "disposal_date": None,
         "disposal_price": None,
         "disposal_destination": None,
+        "salvage_value": None,
+        "purchase_date": donor["purchase_date"],
         "updated_at": now(),
     }
     if oc == "spare":
-        fields["location_id"] = int_or_none(r["location"]) or donor_loc
+        if target:
+            fields["parent_id"] = target["id"]
+        else:
+            fields["location_id"] = int_or_none(r["location"]) or donor_loc
+        if val is not None:
+            fields["salvage_value"] = val
+            fields["purchase_price"] = val
     elif oc == "repair":
         fields["parent_id"] = target["id"]
     elif oc in ("sold", "given_away", "scrapped"):
@@ -1033,17 +1061,18 @@ def apply_part(donor_id, donor_loc, existing, oc, r, target, date):
         fields["disposal_date"] = date
         fields["disposal_price"] = (val or 0.0) if oc == "sold" else None
         fields["disposal_destination"] = clean(r["dest"])
+    note = f"Salvaged from {donor['ref']} {donor['name']} on {date}"
+    if clean(r["desc"]):
+        note += f": {r['desc'].strip()}"
     if existing:
-        if clean(r["desc"]):
-            ex("UPDATE items SET notes = COALESCE(notes || char(10), '') || ? WHERE id = ?",
-               (r["desc"].strip(), existing))
+        ex("UPDATE items SET notes = COALESCE(notes || char(10), '') || ? WHERE id = ?", (note, existing))
         ex(f"UPDATE items SET {', '.join(k + ' = ?' for k in fields)} WHERE id = ?",
            list(fields.values()) + [existing])
         part_id = existing
     else:
         # a new part's "added" date is the day it came off the donor
-        fields.update(ref=allocate_ref(), name=r["name"].strip(), description=clean(r["desc"]),
-                      created_at=date if date != today() else now(), purchase_date=None)
+        fields.update(ref=allocate_ref(), name=r["name"].strip(), notes=note,
+                      created_at=date if date != today() else now())
         part_id = ex(f"INSERT INTO items({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
                      list(fields.values()))
     if oc == "repair":
@@ -1078,10 +1107,10 @@ def item_breakdown(item_id):
             if oc == "leave":
                 continue
             target = None
-            if oc == "repair":
+            if oc == "repair" or (oc == "spare" and r["target"].strip()):
                 target = resolve_item(r["target"])
                 if not target:
-                    errors.append(f"'{r['name'] or 'part'}': couldn't find the item it repaired ('{r['target']}').")
+                    errors.append(f"'{r['name'] or 'part'}': couldn't find the item '{r['target']}'.")
                 elif target["id"] == item_id or (existing and (target["id"] == existing or
                                                                target["id"] in item_descendant_ids(existing))):
                     errors.append(f"'{r['name']}': can't fit a part into the donor or into itself.")
@@ -1141,10 +1170,10 @@ def part_add(item_id):
     if existing:
         r["name"] = inside["name"]
     target = None
-    if oc == "repair":
+    if oc == "repair" or (oc == "spare" and r["target"].strip()):
         target = resolve_item(r["target"])
         if not target:
-            errors.append(f"Couldn't find the item it was fitted into ('{r['target']}').")
+            errors.append(f"Couldn't find the item '{r['target']}'.")
         elif target["id"] == item_id or (existing and (target["id"] == existing or
                                                        target["id"] in item_descendant_ids(existing))):
             errors.append("A part can't be fitted into the donor or into itself.")
@@ -1557,7 +1586,7 @@ def reports():
     }
     # Profit on whole items; shells of broken-down items are accounted for under breakdowns instead.
     sales["profit"] = sum((it["disposal_price"] or 0) - cost_basis(it) for it in sold
-                          if not it["harvested_from_id"] and not it["broken_date"])
+                          if (not it["harvested_from_id"] or it["salvage_value"] is not None) and not it["broken_date"])
 
     broken = sorted([it for it in items.values() if it["broken_date"] and in_range(it["broken_date"], start, end)],
                     key=lambda it: it["broken_date"] or "", reverse=True)
@@ -1576,7 +1605,8 @@ def reports():
     bt["net"] = bt["income"] - bt["cost"]
 
     # Purchases in range
-    bought = [it for it in items.values() if it["purchase_date"] and in_range(it["purchase_date"], start, end)]
+    bought = [it for it in items.values() if it["purchase_date"] and not it["harvested_from_id"]
+              and in_range(it["purchase_date"], start, end)]
     purchases = {"count": len(bought), "spent": sum(it["purchase_price"] or 0 for it in bought)}
     # Work done in range (by the date of each log entry)
     wrows = [r for r in q("SELECT date, cost FROM work_log") if in_range(r["date"], start, end)]

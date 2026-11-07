@@ -19,8 +19,8 @@ Python/Flask + SQLite, one container, no external services. Everything (database
 - **Valuations**: a separate, dated record of what each item is worth (e.g. for insurance), each with a source. They don't affect spend or profit; lists and reports show them as their own total.
 - **Sold / given away / scrapped**: date, price and destination. Optionally the contents go with the item. The item leaves its location and is listed under **Sold** on the Locations page. Sold isn't a real location, so only recording a sale puts things there. **Back in collection** returns it to where it was.
 - **Breaking for spares**: a donor leaves the collection and is treated like a sale whose price builds up part by part. List the parts as you take them off. Each part becomes its own item (with a reference number and a link back to the donor) and has one of these outcomes:
-  - *Keep as spare*: goes to a location. It earns nothing until it's sold or fitted.
-  - *Fitted into one of my items*: gets nested inside the repaired item, with an optional internal price. That price is income for the donor and a work log cost on the repaired item.
+  - *Create new item or subitem*: becomes its own item, in a location or inside another item. Give it an optional value: that's fixed income for the donor and the new item's cost, so if you sell it later the profit or loss is the part's own. With no value it earns the donor nothing until it's sold or fitted.
+  - *Add to work log of another item*: gets nested inside that item and logged in its work log, with an optional internal price. That price is income for the donor and a work cost on the other item.
   - *Sold / charged to someone*: records the price and who to.
   - *Given away / scrapped*.
   
@@ -111,7 +111,8 @@ Spend and valuations are two separate running totals:
 - **Valued at** = the latest valuation of each item that has one. Items without a valuation add nothing. Parts listed inside an item are valued separately, so value a computer without the parts you've listed inside it.
 - **Donor income** = what its parts were sold or charged for + internal prices of parts fitted into your own items + what the shell sold for. A part broken down further passes on its own parts' income. Spares still on the shelf count for nothing until used.
 - **Donor net** = donor income − what the donor cost (purchase + work). It shows as "so far" until the donor is finished.
-- A harvested part has no spend of its own (that's on the donor). An internal price makes it a work cost on the item it was fitted into.
+- A harvested part has no spend of its own unless it was given a value when it came off (then that value is its cost). An internal price makes it a work cost on the item it was fitted into. Either way the same amount is income for the donor, so the totals always match the real money in and out.
+- New parts copy the donor's purchase date and get a "Salvaged from …" note. They aren't counted as purchases in reports.
 
 ## Backups
 

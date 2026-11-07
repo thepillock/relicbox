@@ -185,7 +185,7 @@ form.rename input { flex: 1; }
 .part-row[data-outcome=given_away] .f-dest { display: flex !important; }
 .part-row[data-outcome=sold] .lbl-price { display: inline !important; }
 .part-row[data-outcome=sold] .lbl-value { display: none; }
-.part-row[data-outcome=spare] .f-value, .part-row[data-outcome=given_away] .f-value { display: none; }
+.part-row[data-outcome=given_away] .f-value { display: none; }
 .part-row[data-outcome=leave] { border-left-color: var(--line); opacity: .75; }
 .part-row[data-outcome=leave] .f-value, .part-row[data-outcome=leave] .f-desc { display: none; }
 .part-row[data-outcome=scrapped] .f-value { display: none; }
@@ -267,7 +267,7 @@ table.ledger tr.current td { font-weight: 600; }
 table.parts .d-loc, table.parts .d-target, table.parts .d-dest { display: none; }
 tr[data-outcome=spare] .d-loc, tr[data-outcome=repair] .d-target,
 tr[data-outcome=sold] .d-dest, tr[data-outcome=given_away] .d-dest { display: block; }
-tr.new-row:not([data-outcome=sold]):not([data-outcome=repair]) .d-amount { visibility: hidden; }
+tr.new-row:not([data-outcome=sold]):not([data-outcome=repair]):not([data-outcome=spare]) .d-amount { visibility: hidden; }
 tr.sold-row td { border-top: 2px solid var(--line); }
 @media (max-width: 640px) {
   table.ledger, table.ledger tbody, table.ledger tfoot { display: block; width: 100%; }
@@ -314,3 +314,10 @@ button.toggle[aria-expanded=true] .caret { transform: rotate(90deg); }
 @media (max-width: 640px) {
   .card-value .card-note { max-width: 6.5rem; white-space: normal; margin-left: auto; line-height: 1.25; }
 }
+
+/* parts: "create new item or subitem" can go in a location or inside another item, with a value */
+.part-row .lbl-spare, .part-row .lbl-repair { display: none; }
+.part-row[data-outcome=repair] .lbl-repair, .part-row[data-outcome=spare] .lbl-spare { display: inline; }
+.part-row[data-outcome=spare] .lbl-value { display: none; }
+.part-row[data-outcome=spare] .f-repair { display: flex !important; }
+tr[data-outcome=spare] .d-target { display: block; }
