@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>relicbox-test</Name>
+  <Repository>ghcr.io/thepillock/relicbox:test</Repository>
+  <Registry>https://github.com/thepillock/relicbox/pkgs/container/relicbox</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Overview>RelicBox inventory - TEST track (updates on every push to main). Uses its own data folder, never the stable one.</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3200]/</WebUI>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <Config Name="Web UI port" Target="3200" Default="3201" Mode="tcp" Type="Port" Display="always" Required="true">3201</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/relicbox-test" Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/relicbox-test</Config>
+  <Config Name="TZ" Target="TZ" Default="Europe/London" Type="Variable" Display="always" Required="false">Europe/London</Config>
+  <Config Name="APP_PASSWORD" Target="APP_PASSWORD" Default="" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+</Container>

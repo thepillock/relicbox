@@ -55,6 +55,8 @@ dbm.init_db(app.config["DB_PATH"])
 app.teardown_appcontext(dbm.close_db)
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
+APP_CHANNEL = os.environ.get("APP_CHANNEL", "dev")
 
 STATUSES = {
     "active": "In collection",
@@ -416,6 +418,8 @@ def inject():
         "item_label": item_label,
         "label_format": setting("label_format", "qr"),
         "item_qr_url": item_qr_url,
+        "app_version": APP_VERSION,
+        "app_channel": APP_CHANNEL,
     }
 
 

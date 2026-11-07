@@ -34,6 +34,8 @@ code, .mono { font-family: var(--mono); }
 .brand { display: flex; align-items: center; gap: .45rem; color: #f5d9a8; font-weight: 700; font-size: 1.05rem; }
 .brand img { width: 26px; height: 26px; }
 .brand:hover { text-decoration: none; }
+.channel-badge { background: #c0392b; color: #fff; font-weight: 700; font-size: .75rem; letter-spacing: .05em;
+  padding: .15rem .45rem; border-radius: 5px; }
 .topsearch { flex: 1 1 180px; max-width: 420px; }
 .topsearch input { width: 100%; background: #2a3037; border: 1px solid #3a424b; color: #eee; border-radius: 8px; padding: .45rem .7rem; }
 .mainnav { display: flex; gap: .15rem; overflow-x: auto; }

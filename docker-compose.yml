@@ -1,7 +1,6 @@
 services:
   relicbox:
-    build: .
-    image: relicbox:latest
+    image: ghcr.io/thepillock/relicbox:latest   # or :test; remove and use `build: .` to build locally
     container_name: relicbox
     restart: unless-stopped
     ports:
