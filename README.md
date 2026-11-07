@@ -46,8 +46,23 @@ docker run -d --name relicbox -p 3200:3200 -v /path/to/data:/data relicbox
 
 ### Unraid
 
-1. Copy this folder to the server (e.g. `/mnt/user/appdata/relicbox-src`) and run `docker build -t relicbox .` from it.
-2. Add a container in the Docker tab: repository `relicbox`, port 3200 → 3200, path `/data` → `/mnt/user/appdata/relicbox`.
+Images are built by GitHub Actions and published to `ghcr.io/thepillock/relicbox`. There are two tracks:
+
+| Track | Image tag | Updated when |
+|---|---|---|
+| Stable | `:latest` (also `:1.2.3`, `:1.2`) | a release tag like `v1.2.3` is pushed |
+| Test | `:test` | anything is pushed to `main` |
+
+Test builds show a red **TEST** badge in the top bar. The running version is shown at the bottom of Settings.
+
+1. Copy `unraid/relicbox.xml` and `unraid/relicbox-test.xml` to `/boot/config/plugins/dockerMan/templates-user/` on the server.
+2. Docker tab → **Add Container** → pick `relicbox` from the template list → Apply. Do the same for `relicbox-test`.
+   - Stable uses port 3200 and `/mnt/user/appdata/relicbox`. Test uses port 3201 and `/mnt/user/appdata/relicbox-test`. **Never point the test container at the stable data folder**: a test build may change the database.
+3. Unraid now shows **update available** when a new image is pushed to either tag.
+
+To release: `git tag v1.2.3 && git push origin v1.2.3`. To roll back stable, edit the container and change `:latest` to an earlier version such as `:1.2.2`.
+
+To build locally instead: `docker build -t relicbox .` and use repository `relicbox`.
 
 ### Camera scanning needs HTTPS
 

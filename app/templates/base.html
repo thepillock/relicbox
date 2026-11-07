@@ -12,6 +12,7 @@
 <body>
 <header class="topbar">
   <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="">{{ site_name }}</a>
+  {% if app_channel == 'test' %}<span class="channel-badge" title="Test build {{ app_version }}">TEST</span>{% endif %}
   <form class="topsearch" action="{{ url_for('items_list') }}">
     <input type="search" name="q" placeholder="Search items…" value="{{ request.args.get('q', '') if request.endpoint == 'items_list' else '' }}" aria-label="Search">
     <input type="hidden" name="status" value="all">

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>relicbox</Name>
+  <Repository>ghcr.io/thepillock/relicbox:latest</Repository>
+  <Registry>https://github.com/thepillock/relicbox/pkgs/container/relicbox</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Overview>RelicBox inventory - STABLE track (updates when a v* release tag is pushed).</Overview>
+  <Category>Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3200]/</WebUI>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <Config Name="Web UI port" Target="3200" Default="3200" Mode="tcp" Type="Port" Display="always" Required="true">3200</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/relicbox" Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/relicbox</Config>
+  <Config Name="TZ" Target="TZ" Default="Europe/London" Type="Variable" Display="always" Required="false">Europe/London</Config>
+  <Config Name="APP_PASSWORD" Target="APP_PASSWORD" Default="" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+</Container>
