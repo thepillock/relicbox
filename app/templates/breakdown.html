@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import location_options with context %}
+{% block title %}Break down {{ donor.name }}{% endblock %}
+
+{% macro part_row(r, existing) %}
+<div class="part-row" data-outcome="{{ r.outcome }}">
+  <input type="hidden" name="row_existing_id" value="{{ r.existing_id }}">
+  <div class="grid">
+    {% if existing %}
+      <label class="wide">Part already recorded inside
+        <input type="hidden" name="row_name" value="{{ r.name }}">
+        <span class="static"><code class="ref">{{ r.ref }}</code> {{ r.name }}</span></label>
+    {% else %}
+      <label class="wide">Part name<input name="row_name" value="{{ r.name }}" placeholder="e.g. Gary chip, PSU, keyboard"></label>
+    {% endif %}
+    <label>What happened
+      <select name="row_outcome" class="outcome">
+        {% for k, v in PART_OUTCOMES.items() if existing or k != 'leave' %}
+          <option value="{{ k }}" {{ 'selected' if r.outcome == k }}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="f-value"><span><span class="lbl-value">Value attached</span><span class="lbl-price">Sale price</span> ({{ currency }})</span>
+      <input name="row_value" inputmode="decimal" value="{{ r.value }}"></label>
+    <label class="f-spare">Store in
+      <select name="row_location">{{ location_options(locations, r.location or '', 'Same place as donor') }}</select></label>
+    <label class="f-repair">Fitted into item
+      <input name="row_target" class="item-picker" list="item-options" value="{{ r.target }}" placeholder="ref or name of repaired item" autocomplete="off"></label>
+    <label class="f-dest">Sold / given to<input name="row_dest" value="{{ r.dest }}"></label>
+    <label class="f-desc wide">Notes<input name="row_desc" value="{{ r.desc }}"></label>
+  </div>
+  {% if not existing %}<button type="button" class="link danger remove-row">Remove</button>{% endif %}
+</div>
+{% endmacro %}
+
+{% block body %}
+<div class="pagehead">
+  <div><h1>Break for spares</h1>
+  <div class="sub"><code class="ref">{{ donor.ref }}</code> {{ donor.name }}{% if donor.purchase_price is not none %} · bought for {{ donor.purchase_price|money }}{% endif %}</div></div>
+  <a class="btn" href="{{ url_for('item_view', item_id=donor.id) }}">Cancel</a>
+</div>
+
+{% if parts %}
+<details class="already"><summary>{{ parts|length }} part(s) already recorded · {{ part_totals.recovered|money }} recovered</summary>
+  {% include '_parts_table.html' %}
+</details>
+{% endif %}
+
+<form method="post" class="stack" id="breakdown-form">
+  <fieldset>
+    <legend>Breakdown</legend>
+    <div class="grid">
+      <label>Date<input type="date" name="date" value="{{ today }}"></label>
+      <label>Shell value after removing parts ({{ currency }})<input name="donor_value" inputmode="decimal" placeholder="leave blank to keep {{ donor.value|money('none') }}"></label>
+      <label class="wide">Notes<input name="notes" placeholder="e.g. dead CPU, board cracked"></label>
+    </div>
+    {% if donor.status != 'broken' %}
+    <label class="check"><input type="checkbox" name="mark_broken" value="1" checked> Mark {{ donor.ref }} as broken for spares</label>
+    {% endif %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Parts removed</legend>
+    <p class="hint">Each part gets its own reference number so it can be tracked, labelled, sold or fitted into another item later.
+      "Value attached" is what the part is worth to you – it counts towards what you recovered from this item.</p>
+    <div id="rows">
+      {% for r in rows %}{{ part_row(r, r.existing_id) }}{% endfor %}
+    </div>
+    <button type="button" class="btn" id="add-row">+ Add another part</button>
+  </fieldset>
+  <div class="formbar"><button class="btn primary">Save breakdown</button></div>
+</form>
+
+<template id="row-template">{{ part_row({'existing_id': '', 'name': '', 'outcome': 'spare', 'value': '', 'location': '', 'target': '', 'dest': '', 'desc': ''}, False) }}</template>
+{% endblock %}

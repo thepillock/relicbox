@@ -1,0 +1,19 @@
+services:
+  relicbox:
+    build: .
+    image: relicbox:latest
+    container_name: relicbox
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+      # Once Homebox is switched off, uncomment this line so old Homebox QR labels
+      # (http://192.168.1.55:3100/item/...) open RelicBox straight from the phone camera.
+      # - "3100:3200"
+    volumes:
+      - ./data:/data          # on Unraid: /mnt/user/appdata/relicbox:/data
+    environment:
+      - TZ=Europe/London
+      # Optional single shared password. Leave unset if it's only reachable on your LAN
+      # or your reverse proxy already handles authentication.
+      # - APP_PASSWORD=change-me
+      # - MAX_UPLOAD_MB=64

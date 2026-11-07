@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}Log in{% endblock %}
+{% block body %}
+<form method="post" class="stack narrow login">
+  <h1>{{ site_name }}</h1>
+  <label>Password<input type="password" name="password" autofocus autocomplete="current-password"></label>
+  <div class="formbar"><button class="btn primary">Log in</button></div>
+</form>
+{% endblock %}

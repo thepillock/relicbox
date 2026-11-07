@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import item_cards with context %}
+{% block title %}{{ loc.name }}{% endblock %}
+{% block body %}
+<nav class="crumbs"><a href="{{ url_for('locations') }}">Locations</a>
+  {% for l in path %} › {% if not loop.last %}<a href="{{ url_for('location_view', loc_id=l.id) }}">{{ l.name }}</a>{% else %}<span>{{ l.name }}</span>{% endif %}{% endfor %}</nav>
+<div class="pagehead">
+  <div><h1>{{ loc.name }}</h1>
+    {% set s = stats.get(loc.id) %}
+    <div class="sub muted">{{ s.count if s else 0 }} items in here (including sub-locations) · {{ (s.value if s else 0)|money }}</div></div>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('item_new', location_id=loc.id) }}">+ Add item here</a>
+    <a class="btn" href="{{ url_for('location_new', parent_id=loc.id) }}">+ Sub-location</a>
+    <a class="btn" href="{{ url_for('location_edit', loc_id=loc.id) }}">Edit</a>
+    <a class="btn" href="{{ url_for('items_list', location=loc.id) }}">All items inside</a>
+  </div>
+</div>
+{% if loc.description %}<p class="desc">{{ loc.description }}</p>{% endif %}
+
+{% if sublocs %}
+<h2>Sub-locations</h2>
+<ul class="chips">
+  {% for c in sublocs %}{% set cs = stats.get(c.id) %}
+  <li><a href="{{ url_for('location_view', loc_id=c.id) }}">{{ c.name }} <span class="muted">{{ cs.count if cs else 0 }}</span></a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<div class="pagehead">
+  <h2>Stored directly here</h2>
+  <form class="inline"><select name="status" onchange="this.form.submit()">
+    <option value="active" {{ 'selected' if status == 'active' }}>In collection</option>
+    <option value="all" {{ 'selected' if status == 'all' }}>Any status</option>
+  </select></form>
+</div>
+{{ item_cards(items, show_where=False) }}
+
+<section class="danger-zone">
+  <form method="post" action="{{ url_for('location_delete', loc_id=loc.id) }}" class="inline" data-confirm="Delete {{ loc.name }}? Its sub-locations and items will move up one level.">
+    <button class="btn small danger">Delete location</button></form>
+</section>
+{% endblock %}

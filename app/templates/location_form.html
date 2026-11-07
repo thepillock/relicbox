@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import location_options with context %}
+{% block title %}{{ 'Edit ' ~ loc.name if loc else 'New location' }}{% endblock %}
+{% block body %}
+<div class="pagehead"><h1>{{ 'Edit ' ~ loc.name if loc else 'New location' }}</h1>
+  <a class="btn" href="{{ url_for('location_view', loc_id=loc.id) if loc else url_for('locations') }}">Cancel</a></div>
+<form method="post" class="stack narrow">
+  <fieldset>
+    <div class="grid">
+      <label class="wide">Name *<input name="name" required value="{{ f.name or '' }}" autofocus></label>
+      <label class="wide">Inside<select name="parent_id">{{ location_options(tree, f.parent_id or '', '— top level —') }}</select></label>
+      <label class="wide">Description<textarea name="description" rows="4">{{ f.description or '' }}</textarea></label>
+    </div>
+  </fieldset>
+  <div class="formbar"><button class="btn primary">Save</button></div>
+</form>
+{% endblock %}

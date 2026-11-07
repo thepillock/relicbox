@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Scan{% endblock %}
+{% block body %}
+<h1>Scan</h1>
+{% if not_found %}
+<div class="flash error">No item has reference or barcode <code>{{ not_found }}</code>.
+  <a href="{{ url_for('item_new', barcode=not_found) }}">Create a new item with this barcode</a></div>
+{% endif %}
+<div class="scanner" id="scanner">
+  <video id="scan-video" playsinline muted></video>
+  <div class="scan-frame"></div>
+  <p class="scan-status" id="scan-status">Starting camera…</p>
+</div>
+<form action="{{ url_for('lookup') }}" class="bigsearch">
+  <input name="code" id="code" placeholder="…or type a reference / barcode" autocomplete="off" class="mono">
+  <button>Find</button>
+</form>
+<p class="hint">Scans the item's reference label or any manufacturer barcode you've stored against an item.
+  Phone cameras only work when the site is served over HTTPS (or on localhost).</p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/zxing.min.js') }}" onerror="void 0"></script>
+<script src="{{ url_for('static', filename='scanner.js') }}"></script>
+<script>
+Scanner.start(document.getElementById('scan-video'), document.getElementById('scan-status'), code => {
+  location.href = '{{ url_for('lookup') }}?code=' + encodeURIComponent(code);
+});
+</script>
+{% endblock %}

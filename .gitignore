@@ -1,0 +1,6 @@
+data/
+app/data/
+__pycache__/
+*.pyc
+.venv/
+app/static/vendor/

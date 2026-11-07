@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import location_options with context %}
+{% block title %}{{ 'Edit ' ~ item.name if item else 'New item' }}{% endblock %}
+{% block body %}
+<div class="pagehead">
+  <h1>{{ 'Edit ' ~ item.ref if item else 'New item' }}</h1>
+  {% if item %}<a class="btn" href="{{ url_for('item_view', item_id=item.id) }}">Cancel</a>{% endif %}
+</div>
+<form method="post" enctype="multipart/form-data" class="stack">
+  <fieldset>
+    <legend>Item</legend>
+    <div class="grid">
+      <label class="wide">Name *<input name="name" required value="{{ f.name or '' }}" autocomplete="off"></label>
+      <label>Reference<input name="ref" value="{{ f.ref or '' }}" placeholder="auto" autocomplete="off" class="mono"></label>
+      <label>Barcode
+        <span class="with-btn"><input name="barcode" id="barcode" value="{{ f.barcode or '' }}" autocomplete="off" class="mono">
+        <button type="button" class="btn small" data-scan-into="barcode">Scan</button></span>
+      </label>
+      <label>Quantity<input name="quantity" type="number" min="1" value="{{ f.quantity or 1 }}"></label>
+      <label>Current value ({{ currency }})<input name="value" inputmode="decimal" value="{{ f.value|num if f.value is not none else '' }}" placeholder="for reports"></label>
+      <label class="wide">Description<textarea name="description" rows="3">{{ f.description or '' }}</textarea></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Where is it?</legend>
+    <div class="grid">
+      <label>Location<select name="location_id">{{ location_options(locations, f.location_id or '') }}</select></label>
+      <label>…or inside item
+        <input name="parent" class="item-picker" list="item-options" value="{{ f.parent or '' }}" placeholder="ref or name" autocomplete="off">
+      </label>
+    </div>
+    <p class="hint">If it's inside another item (e.g. a card inside a computer), it takes that item's location automatically.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Descriptors</legend>
+    <div class="grid">
+      {% for d in descriptors %}
+      <label>{{ d.name }}<input name="desc_{{ d.id }}" value="{{ d.value or '' }}" autocomplete="off"></label>
+      {% endfor %}
+    </div>
+    <p class="hint">Change the list of descriptors in <a href="{{ url_for('settings_page') }}">Settings</a>.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Purchase</legend>
+    <div class="grid">
+      <label>Date<input type="date" name="purchase_date" value="{{ f.purchase_date or '' }}"></label>
+      <label>Price ({{ currency }})<input name="purchase_price" inputmode="decimal" value="{{ f.purchase_price|num if f.purchase_price is not none else '' }}"></label>
+      <label>Seller<input name="purchase_seller" list="sellers" value="{{ f.purchase_seller or '' }}"></label>
+      <label>Platform<input name="purchase_platform" list="platforms" value="{{ f.purchase_platform or '' }}" placeholder="eBay, Facebook, show…"></label>
+    </div>
+    <datalist id="platforms">{% for p in platforms %}<option value="{{ p }}">{% endfor %}</datalist>
+    <datalist id="sellers">{% for p in sellers %}<option value="{{ p }}">{% endfor %}</datalist>
+  </fieldset>
+
+  <fieldset>
+    <legend>Photos</legend>
+    <input type="file" name="photos" accept="image/*" multiple>
+    {% if item %}<p class="hint">Existing photos are managed on the item page.</p>{% endif %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Notes</legend>
+    <textarea name="notes" rows="4">{{ f.notes or '' }}</textarea>
+  </fieldset>
+
+  <details {{ 'open' if (f.status and f.status != 'active') or f.harvested_from }}>
+    <summary>Status, disposal &amp; provenance</summary>
+    <fieldset>
+      <div class="grid">
+        <label>Status<select name="status">
+          {% for k, v in STATUSES.items() %}<option value="{{ k }}" {{ 'selected' if (f.status or 'active') == k }}>{{ v }}</option>{% endfor %}
+        </select></label>
+        <label>Sold / given / scrapped date<input type="date" name="disposal_date" value="{{ f.disposal_date or '' }}"></label>
+        <label>Sale price ({{ currency }})<input name="disposal_price" inputmode="decimal" value="{{ f.disposal_price|num if f.disposal_price is not none else '' }}"></label>
+        <label>Sold / given to<input name="disposal_destination" value="{{ f.disposal_destination or '' }}"></label>
+        <label>Broken for spares on<input type="date" name="broken_date" value="{{ f.broken_date or '' }}"></label>
+        <label>Harvested from item<input name="harvested_from" class="item-picker" list="item-options" value="{{ f.harvested_from or '' }}" autocomplete="off" placeholder="donor ref"></label>
+      </div>
+    </fieldset>
+  </details>
+
+  <div class="formbar">
+    <button class="btn primary">Save</button>
+    {% if not item %}<button class="btn" name="again" value="1">Save &amp; add another</button>{% endif %}
+  </div>
+</form>
+{% include '_scanner_modal.html' %}
+{% endblock %}

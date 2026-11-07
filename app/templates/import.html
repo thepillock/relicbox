@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Import from Homebox{% endblock %}
+{% block body %}
+<div class="pagehead"><h1>Import from Homebox</h1><a class="btn" href="{{ url_for('settings_page') }}">Back to settings</a></div>
+
+{% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+
+{% if report %}
+<section class="stats">
+  <div class="stat"><b>{{ report['items'] }}</b><span>items imported</span></div>
+  <div class="stat"><b>{{ report['locations'] }}</b><span>locations created</span></div>
+  {% for st, n in report['status'].items() %}<div class="stat"><b>{{ n }}</b><span>{{ STATUSES[st]|lower }}</span></div>{% endfor %}
+</section>
+{% if report.get('ref_scheme') %}<p>Reference numbers carry on from Homebox's asset IDs. The next new item will be <code class="ref">{{ report['ref_scheme'] }}</code>.</p>{% endif %}
+<p>Your old Homebox QR labels will open the matching item from the <a href="{{ url_for('scan') }}">Scan</a> page.</p>
+
+{% if report['broken'] %}
+<h3>Broken for spares: record the parts</h3>
+<p class="hint">These were in your "breaking for parts" location. Their breakdown date is set to today, so correct it and add the parts removed so far.</p>
+<ul>{% for id, ref, name in report['broken'] %}<li><a href="{{ url_for('item_breakdown', item_id=id) }}"><code class="ref">{{ ref }}</code> {{ name }}</a></li>{% endfor %}</ul>
+{% endif %}
+{% if report['check'] %}
+<h3>Worth a look</h3>
+<p class="hint">The notes suggest these were broken down or bought for spares, or their container couldn't be matched. You may want to re-record them using <b>Break for spares</b>.</p>
+<ul>{% for id, ref, name in report['check'] %}<li><a href="{{ url_for('item_view', item_id=id) }}">{% if ref %}<code class="ref">{{ ref }}</code> {% endif %}{{ name }}</a></li>{% endfor %}</ul>
+{% endif %}
+{% if report['renumbered'] %}
+<h3>Renumbered</h3>
+<ul>{% for r in report['renumbered'] %}<li>{{ r }}</li>{% endfor %}</ul>
+{% endif %}
+{% if report['damaged'] %}
+<h3>Values that look damaged</h3>
+<p class="hint">These look like a spreadsheet turned them into scientific notation. Correct them by hand.</p>
+<ul>{% for r in report['damaged'] %}<li>{{ r }}</li>{% endfor %}</ul>
+{% endif %}
+{% if report['skipped'] %}
+<h3>Already imported (skipped)</h3>
+<p class="muted">{{ report['skipped']|join(', ') }}</p>
+{% endif %}
+<p><a class="btn primary" href="{{ url_for('items_list') }}">View items</a></p>
+
+{% else %}
+<p>In Homebox go to <b>Tools → Export inventory</b>, then upload the CSV here. Don't open it in Excel first, because Excel corrupts serial numbers.</p>
+<ul class="hint">
+  <li>Homebox asset IDs (e.g. <code>000-138</code>) become reference numbers, and new items continue the same numbering.</li>
+  <li>Locations, nested items, purchase details, sales, manufacturer, model, serial number and custom fields all carry over.</li>
+  <li>Each item keeps its Homebox ID, so existing QR labels still work.</li>
+  <li>Photos aren't included in Homebox's CSV export, so they need adding again.</li>
+  <li>It's safe to run again. Items that were already imported are skipped.</li>
+</ul>
+<form method="post" enctype="multipart/form-data" class="stack narrow">
+  <fieldset>
+    <legend>Homebox export</legend>
+    <input type="file" name="csv" accept=".csv,text/csv" required>
+  </fieldset>
+  <fieldset>
+    <legend>Locations you used as a status</legend>
+    <div class="grid">
+      <label class="wide">Meaning "sold" (or given away when there's no sale price)<input name="sold" value="{{ form.sold }}"></label>
+      <label class="wide">Meaning "broken for spares"<input name="broken" value="{{ form.broken }}"></label>
+      <label class="wide">Not a real place, so leave the location empty<input name="ignore" value="{{ form.ignore }}"></label>
+    </div>
+    <p class="hint">Separate multiple names with commas. These won't be created as locations.</p>
+  </fieldset>
+  <div class="formbar"><button class="btn primary">Import</button></div>
+</form>
+{% endif %}
+{% endblock %}

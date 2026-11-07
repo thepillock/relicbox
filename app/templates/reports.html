@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% block title %}Reports{% endblock %}
+{% block body %}
+<div class="pagehead">
+  <h1>Reports</h1>
+  <a class="btn" href="{{ url_for('export_csv') }}">Export CSV</a>
+</div>
+
+<h2>The collection now</h2>
+<section class="stats">
+  <div class="stat"><b>{{ collection.count }}</b><span>items ({{ collection.pieces }} pieces)</span></div>
+  <div class="stat"><b>{{ collection.top_level }}</b><span>top-level items</span></div>
+  <div class="stat"><b>{{ collection.value|money }}</b><span>current value</span></div>
+  <div class="stat"><b>{{ collection.cost|money }}</b><span>paid for them</span></div>
+  <div class="stat"><b>{{ collection.spares }}</b><span>harvested spares on the shelf</span></div>
+</section>
+<p class="hint">Value uses each item's "current value", falling back to its purchase price. Parts inside an item are counted separately, so record a computer's value excluding parts you've listed inside it.</p>
+
+<div class="two">
+<section>
+  <h3>Where it is</h3>
+  <div class="tablewrap">
+  <table class="data tree">
+    <thead><tr><th>Location</th><th class="num">Items</th><th class="num">Value</th></tr></thead>
+    <tbody>
+    {% for loc, depth in tree %}{% set s = stats.get(loc.id) %}
+      {% if s %}
+      <tr><td style="padding-left: {{ 0.6 + depth * 1.4 }}rem">{{ '└ ' if depth }}<a href="{{ url_for('location_view', loc_id=loc.id) }}">{{ loc.name }}</a></td>
+        <td class="num">{{ s.count }}</td><td class="num">{{ s.value|money }}</td></tr>
+      {% endif %}
+    {% endfor %}
+    {% if unassigned %}<tr><td class="muted">No location</td><td class="num">{{ unassigned.count }}</td><td class="num">{{ unassigned.value|money }}</td></tr>{% endif %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h3>By descriptor</h3>
+  <form class="filters">
+    <select name="group" onchange="this.form.submit()">
+      <option value="">Choose…</option>
+      {% for dt in dts %}<option value="{{ dt.id }}" {{ 'selected' if group_by == dt.id }}>{{ dt.name }}</option>{% endfor %}
+    </select>
+    {% if year %}<input type="hidden" name="year" value="{{ year }}">{% endif %}
+  </form>
+  {% if grouped %}
+  <div class="tablewrap">
+  <table class="data">
+    <thead><tr><th>Value</th><th class="num">Items</th><th class="num">Value</th></tr></thead>
+    <tbody>
+    {% for key, g in grouped %}
+      <tr><td>{{ key }}</td><td class="num">{{ g.count }}</td><td class="num">{{ g.value|money }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+</div>
+
+<h2 id="activity">Activity</h2>
+<form class="filters" action="{{ url_for('reports') }}#activity">
+  <select name="year" onchange="this.form.submit()">
+    <option value="">All time / custom</option>
+    {% for y in years %}<option {{ 'selected' if year == y }}>{{ y }}</option>{% endfor %}
+  </select>
+  <label class="inline-label">From <input type="date" name="from" value="{{ start or '' if not year else '' }}"></label>
+  <label class="inline-label">To <input type="date" name="to" value="{{ end or '' if not year else '' }}"></label>
+  <button>Apply</button>
+</form>
+
+<section class="stats">
+  <div class="stat"><b>{{ purchases.count }}</b><span>bought · {{ purchases.spent|money }}</span></div>
+  <div class="stat"><b>{{ sales.count }}</b><span>sold · {{ sales.income|money }} income</span></div>
+  <div class="stat"><b>{{ given|length }}</b><span>given away</span></div>
+  <div class="stat"><b>{{ broken|length }}</b><span>broken for spares · {{ bt.parts|int }} parts</span></div>
+  <div class="stat"><b class="{{ 'pos' if bt.net >= 0 else 'neg' }}">{{ bt.net|money }}</b><span>net from breakdowns</span></div>
+</section>
+
+<h3>Sales</h3>
+<table class="totals">
+  <tr><td>Whole items sold ({{ sales.whole_count }})</td><td>{{ sales.whole_income|money }}</td></tr>
+  <tr><td>Harvested parts sold ({{ sales.parts_count }})</td><td>{{ sales.parts_income|money }}</td></tr>
+  <tr class="net"><td>Total income</td><td>{{ sales.income|money }}</td></tr>
+  <tr><td>Profit on whole items (sale − purchase)</td><td class="{{ 'pos' if sales.profit >= 0 else 'neg' }}">{{ sales.profit|money }}</td></tr>
+</table>
+{% if sold %}
+<div class="tablewrap">
+<table class="data">
+  <thead><tr><th>Date</th><th>Item</th><th>To</th><th class="num">Paid</th><th class="num">Sold for</th></tr></thead>
+  <tbody>
+  {% for it in sold %}
+    <tr><td>{{ it.disposal_date or '' }}</td>
+      <td><a href="{{ url_for('item_view', item_id=it.id) }}"><code class="ref">{{ it.ref }}</code> {{ it.name }}</a>
+        {% if it.donor %}<div class="muted small">part from {{ it.donor.ref }} {{ it.donor.name }}</div>{% endif %}</td>
+      <td>{{ it.disposal_destination or '' }}</td>
+      <td class="num">{{ it.purchase_price|money('') }}</td>
+      <td class="num">{{ it.disposal_price|money }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<h3>Broken for spares</h3>
+<table class="totals">
+  <tr><td>Paid for donor items</td><td>{{ bt.cost|money }}</td></tr>
+  <tr><td>Parts sold separately</td><td>{{ bt.sold|money }}</td></tr>
+  <tr><td>Parts used to repair other items</td><td>{{ bt.repair|money }}</td></tr>
+  <tr><td>Parts kept as spares</td><td>{{ (bt.spare + bt.broken)|money }}</td></tr>
+  <tr><td>Remaining shells</td><td>{{ bt.shell|money }}</td></tr>
+  <tr class="net"><td>Net</td><td class="{{ 'pos' if bt.net >= 0 else 'neg' }}">{{ bt.net|money }}</td></tr>
+</table>
+{% if broken %}
+<div class="tablewrap">
+<table class="data">
+  <thead><tr><th>Date</th><th>Donor</th><th class="num">Parts</th><th class="num">Paid</th><th class="num">Sold</th><th class="num">Repairs</th><th class="num">Spares</th><th class="num">Net</th></tr></thead>
+  <tbody>
+  {% for b in broken %}
+    <tr><td>{{ b.broken_date or '' }}</td>
+      <td><a href="{{ url_for('item_view', item_id=b.id) }}"><code class="ref">{{ b.ref }}</code> {{ b.name }}</a></td>
+      <td class="num">{{ b.nparts }}</td>
+      <td class="num">{{ b.purchase_price|money('') }}</td>
+      <td class="num">{{ b.totals.sold|money }}</td>
+      <td class="num">{{ b.totals.repair|money }}</td>
+      <td class="num">{{ (b.totals.spare + b.totals.broken)|money }}</td>
+      <td class="num {{ 'pos' if b.net >= 0 else 'neg' }}">{{ b.net|money }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if given %}
+<h3>Given away</h3>
+<div class="tablewrap">
+<table class="data">
+  <thead><tr><th>Date</th><th>Item</th><th>To</th><th class="num">Paid</th></tr></thead>
+  <tbody>
+  {% for it in given %}
+    <tr><td>{{ it.disposal_date or '' }}</td><td><a href="{{ url_for('item_view', item_id=it.id) }}"><code class="ref">{{ it.ref }}</code> {{ it.name }}</a></td>
+      <td>{{ it.disposal_destination or '' }}</td><td class="num">{{ it.purchase_price|money('') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

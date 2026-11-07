@@ -1,0 +1,37 @@
+{% macro location_options(tree, selected, blank='— none —') -%}
+  <option value="">{{ blank }}</option>
+  {% for loc, depth in tree -%}
+  <option value="{{ loc.id }}" {{ 'selected' if selected|string == loc.id|string }}>{{ '   ' * depth }}{{ '└ ' if depth }}{{ loc.name }}</option>
+  {% endfor %}
+{%- endmacro %}
+
+{% macro status_badge(s) -%}
+  <span class="badge st-{{ s }}">{{ STATUSES.get(s, s) }}</span>
+{%- endmacro %}
+
+{% macro where(r) -%}
+  {% if r.container %}<span class="muted">in</span> <a href="{{ url_for('item_view', item_id=r.container.id) }}">{{ r.container.name }}</a>{% if r.loc_path %} <span class="muted">·</span> {% endif %}{% endif %}
+  {%- for l in r.loc_path %}{{ ' › ' if not loop.first }}<a href="{{ url_for('location_view', loc_id=l.id) }}">{{ l.name }}</a>{% endfor %}
+{%- endmacro %}
+
+{% macro item_cards(rows, show_where=True) -%}
+<ul class="cards">
+{% for r in rows %}
+  <li class="card st-{{ r.status }}">
+    <a class="thumb" href="{{ url_for('item_view', item_id=r.id) }}">
+      {% if r.photo %}<img loading="lazy" src="{{ url_for('media_thumb', filename=r.photo) }}" alt="">{% else %}<span class="nophoto">{{ r.name[:1] }}</span>{% endif %}
+    </a>
+    <div class="card-body">
+      <a class="card-title" href="{{ url_for('item_view', item_id=r.id) }}">{{ r.name }}</a>
+      <div class="card-meta"><code class="ref">{{ r.ref }}</code>{% if r.quantity and r.quantity > 1 %} <span class="qty">×{{ r.quantity }}</span>{% endif %} {% if r.status != 'active' %}{{ status_badge(r.status) }}{% endif %}</div>
+      {% if show_where %}<div class="card-where">{{ where(r) }}</div>{% endif %}
+    </div>
+    <div class="card-value">
+      {% if r.status == 'sold' %}{{ r.disposal_price|money }}{% else %}{{ (r.value if r.value is not none else r.purchase_price)|money('') }}{% endif %}
+    </div>
+  </li>
+{% else %}
+  <li class="empty">Nothing here yet.</li>
+{% endfor %}
+</ul>
+{%- endmacro %}

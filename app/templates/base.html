@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1f24">
+<title>{% block title %}{{ site_name }}{% endblock %} · {{ site_name }}</title>
+<link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="">{{ site_name }}</a>
+  <form class="topsearch" action="{{ url_for('items_list') }}">
+    <input type="search" name="q" placeholder="Search items…" value="{{ request.args.get('q', '') if request.endpoint == 'items_list' else '' }}" aria-label="Search">
+    <input type="hidden" name="status" value="all">
+  </form>
+  <nav class="mainnav">
+    <a href="{{ url_for('items_list') }}" class="{{ 'on' if request.endpoint and request.endpoint.startswith('item') }}">Items</a>
+    <a href="{{ url_for('locations') }}" class="{{ 'on' if request.endpoint and request.endpoint.startswith('location') }}">Locations</a>
+    <a href="{{ url_for('scan') }}" class="{{ 'on' if request.endpoint == 'scan' }}">Scan</a>
+    <a href="{{ url_for('reports') }}" class="{{ 'on' if request.endpoint == 'reports' }}">Reports</a>
+    <a href="{{ url_for('settings_page') }}" class="{{ 'on' if request.endpoint == 'settings_page' }}">Settings</a>
+    {% if auth_enabled %}<a href="{{ url_for('logout') }}">Log out</a>{% endif %}
+  </nav>
+</header>
+<main>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+<datalist id="item-options"></datalist>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

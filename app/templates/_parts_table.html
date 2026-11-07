@@ -1,0 +1,28 @@
+{% if parts %}
+<div class="tablewrap">
+<table class="data">
+  <thead><tr><th>Ref</th><th>Part</th><th>What happened</th><th class="num">Value</th></tr></thead>
+  <tbody>
+  {% for r in parts %}
+    <tr>
+      <td><a href="{{ url_for('item_view', item_id=r.part.id) }}"><code class="ref">{{ r.part.ref }}</code></a></td>
+      <td>{{ r.part.name }}</td>
+      <td><span class="oc oc-{{ r.outcome }}">{{ OUTCOME_LABELS[r.outcome] }}</span>
+        {% if r.target %} → <a href="{{ url_for('item_view', item_id=r.target.id) }}">{{ r.target.ref }} {{ r.target.name }}</a>{% endif %}
+        {% if r.part.disposal_destination %} → {{ r.part.disposal_destination }}{% endif %}
+        {% if r.part.disposal_date and r.outcome in ('sold', 'given_away', 'scrapped') %} <span class="muted">{{ r.part.disposal_date }}</span>{% endif %}
+      </td>
+      <td class="num">{{ r.value|money }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr><td colspan="3">Sold separately</td><td class="num">{{ part_totals.sold|money }}</td></tr>
+    <tr><td colspan="3">Used to repair other items</td><td class="num">{{ part_totals.repair|money }}</td></tr>
+    <tr><td colspan="3">Kept as spares</td><td class="num">{{ (part_totals.spare + part_totals.broken)|money }}</td></tr>
+  </tfoot>
+</table>
+</div>
+{% else %}
+<p class="muted">No parts recorded yet.</p>
+{% endif %}

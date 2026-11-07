@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import item_cards, status_badge with context %}
+{% block title %}{{ item.name }}{% endblock %}
+{% block body %}
+<nav class="crumbs">
+  {% for l in loc_path %}<a href="{{ url_for('location_view', loc_id=l.id) }}">{{ l.name }}</a> › {% endfor %}
+  {% for a in ancestors %}<a href="{{ url_for('item_view', item_id=a.id) }}">{{ a.name }}</a> › {% endfor %}
+  <span>{{ item.name }}</span>
+</nav>
+
+<div class="pagehead">
+  <div>
+    <h1>{{ item.name }}</h1>
+    <div class="sub"><code class="ref big">{{ item.ref }}</code> {{ status_badge(item.status) }}{% if item.quantity > 1 %} <span class="qty">×{{ item.quantity }}</span>{% endif %}</div>
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('item_edit', item_id=item.id) }}">Edit</a>
+    {% if item.status == 'active' %}
+      <a class="btn" href="{{ url_for('item_dispose', item_id=item.id, kind='sold') }}">Sold / given away</a>
+      <a class="btn" href="{{ url_for('item_breakdown', item_id=item.id) }}">Break for spares</a>
+    {% elif item.status == 'broken' %}
+      <a class="btn" href="{{ url_for('item_breakdown', item_id=item.id) }}">Record more parts</a>
+      <a class="btn" href="{{ url_for('item_dispose', item_id=item.id, kind='scrapped') }}">Dispose of shell</a>
+    {% endif %}
+    {% if item.status != 'active' %}
+      <form method="post" action="{{ url_for('item_reinstate', item_id=item.id) }}" class="inline"><button class="btn">Back in collection</button></form>
+    {% endif %}
+    <a class="btn" href="{{ url_for('item_label_page', item_id=item.id) }}">Label</a>
+  </div>
+</div>
+
+<div class="itemgrid">
+  <div class="col">
+    {% if item.description %}<p class="desc">{{ item.description }}</p>{% endif %}
+
+    <dl class="facts">
+      {% for d in descriptors %}<dt>{{ d.name }}</dt><dd>{{ d.value }}</dd>{% endfor %}
+      {% if item.barcode %}<dt>Barcode</dt><dd class="mono">{{ item.barcode }}</dd>{% endif %}
+      <dt>Value</dt><dd>{{ item.value|money }}{% if contents_value %} <span class="muted">(+ {{ contents_value|money }} of parts inside)</span>{% endif %}</dd>
+      {% if donor %}<dt>Harvested from</dt><dd><a href="{{ url_for('item_view', item_id=donor.id) }}">{{ donor.ref }} — {{ donor.name }}</a></dd>{% endif %}
+    </dl>
+
+    <h3>Purchase</h3>
+    <dl class="facts">
+      <dt>Date</dt><dd>{{ item.purchase_date or '—' }}</dd>
+      <dt>Price</dt><dd>{{ item.purchase_price|money }}</dd>
+      <dt>Seller</dt><dd>{{ item.purchase_seller or '—' }}</dd>
+      <dt>Platform</dt><dd>{{ item.purchase_platform or '—' }}</dd>
+    </dl>
+
+    {% if item.status in ('sold', 'given_away', 'scrapped') %}
+    <h3>{{ STATUSES[item.status] }}</h3>
+    <dl class="facts">
+      <dt>Date</dt><dd>{{ item.disposal_date or '—' }}</dd>
+      {% if item.status == 'sold' %}<dt>Price</dt><dd>{{ item.disposal_price|money }}
+        {% if item.purchase_price is not none and item.disposal_price is not none and not item.harvested_from_id %}
+          <span class="muted">({{ 'profit' if item.disposal_price >= item.purchase_price else 'loss' }} {{ (item.disposal_price - item.purchase_price)|abs|money }})</span>{% endif %}</dd>{% endif %}
+      {% if item.disposal_destination %}<dt>To</dt><dd>{{ item.disposal_destination }}</dd>{% endif %}
+    </dl>
+    {% endif %}
+
+    {% if item.notes %}<h3>Notes</h3><div class="notes">{{ item.notes }}</div>{% endif %}
+  </div>
+
+  <div class="col" id="photos">
+    {% if photos %}
+    <div class="gallery">
+      {% for p in photos %}
+      <figure>
+        <a href="{{ url_for('media_photo', filename=p.filename) }}" target="_blank"><img loading="lazy" src="{{ url_for('media_thumb', filename=p.filename) }}" alt=""></a>
+        <figcaption>
+          {% if not loop.first %}<form method="post" action="{{ url_for('photo_primary', photo_id=p.id) }}" class="inline"><button class="link">Make main</button></form>{% else %}<span class="muted">Main</span>{% endif %}
+          <form method="post" action="{{ url_for('photo_delete', photo_id=p.id) }}" class="inline" data-confirm="Delete this photo?"><button class="link danger">Delete</button></form>
+        </figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('photo_upload', item_id=item.id) }}" class="upload">
+      <label class="btn">Add photos<input type="file" name="photos" accept="image/*" multiple hidden data-autosubmit></label>
+    </form>
+    {% if label_format == 'code128' %}
+    <img class="barcode-preview" src="{{ url_for('barcode_svg', text=item.ref) }}" alt="Barcode for {{ item.ref }}">
+    {% else %}
+    <img class="qr-preview" src="{{ url_for('qr_svg', d=item_qr_url(item.ref)) }}" alt="QR code for {{ item.ref }}">
+    {% endif %}
+  </div>
+</div>
+
+{% if item.broken_date or parts %}
+<section>
+  <h2>Parts harvested{% if item.broken_date %} <small class="muted">broken down {{ item.broken_date }}</small>{% endif %}</h2>
+  {% include '_parts_table.html' %}
+  <table class="totals">
+    <tr><td>Bought for</td><td>{{ item.purchase_price|money }}</td></tr>
+    <tr><td>Recovered from parts</td><td>{{ part_totals.recovered|money }}</td></tr>
+    <tr><td>{{ 'Shell sold for' if item.status == 'sold' else 'Remaining shell value' }}</td><td>{{ shell|money }}</td></tr>
+    {% set net = part_totals.recovered + shell - (item.purchase_price or 0) %}
+    <tr class="net"><td>Net</td><td class="{{ 'pos' if net >= 0 else 'neg' }}">{{ net|money }}</td></tr>
+  </table>
+</section>
+{% endif %}
+
+<section>
+  <div class="pagehead">
+    <h2>Contents <small class="muted">{{ contents|length }}</small></h2>
+    <div class="actions">
+      <a class="btn small" href="{{ url_for('item_new', parent_id=item.id) }}">+ Add part inside</a>
+    </div>
+  </div>
+  {{ item_cards(contents, show_where=False) }}
+</section>
+
+<section class="danger-zone">
+  <a class="btn small" href="{{ url_for('item_new', copy=item.id) }}">Duplicate</a>
+  <form method="post" action="{{ url_for('item_delete', item_id=item.id) }}" class="inline" data-confirm="Delete {{ item.ref }} permanently? Anything inside it moves up a level. (To record a sale or breakdown, use the buttons at the top instead.)">
+    <button class="btn small danger">Delete item</button>
+  </form>
+  <span class="muted">Added {{ item.created_at[:10] }} · updated {{ item.updated_at[:10] }}</span>
+</section>
+{% endblock %}

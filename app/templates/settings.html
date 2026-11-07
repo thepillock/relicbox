@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Settings{% endblock %}
+{% block body %}
+<h1>Settings</h1>
+<div class="two">
+<section>
+  <h2>General</h2>
+  <form method="post" class="stack">
+    <input type="hidden" name="action" value="general">
+    <fieldset>
+      <div class="grid">
+        <label class="wide">Site name<input name="site_name" value="{{ s.site_name }}"></label>
+        <label>Currency symbol<input name="currency" value="{{ s.currency }}" maxlength="4"></label>
+        <label>Reference prefix<input name="ref_prefix" value="{{ s.ref_prefix }}" class="mono"></label>
+        <label>Digits<input name="ref_digits" type="number" min="1" max="10" value="{{ s.ref_digits }}"></label>
+        <label>Next number<input name="ref_next" type="number" min="1" value="{{ s.ref_next }}"></label>
+      </div>
+      <div class="grid" style="margin-top:.7rem">
+        <label>Label type<select name="label_format">
+          <option value="qr" {{ 'selected' if s.label_format != 'code128' }}>QR code (opens the item from any phone camera)</option>
+          <option value="code128" {{ 'selected' if s.label_format == 'code128' }}>Barcode (Code 128)</option>
+        </select></label>
+        <label>Address used in QR labels<input name="public_url" value="{{ s.public_url }}" placeholder="{{ request.host_url.rstrip('/') }}"></label>
+      </div>
+      <p class="hint">Set the address to the one you use from your phone, e.g. your reverse-proxy HTTPS address. If you leave it blank, labels use whatever address you're browsing on now.</p>
+      <p class="hint">Next new item will be <code class="ref">{{ s.ref_prefix }}{{ '%0*d' % (s.ref_digits|int, s.ref_next|int) }}</code>. You can always type your own reference when adding an item.</p>
+    </fieldset>
+    <div class="formbar"><button class="btn primary">Save</button></div>
+  </form>
+
+  <h2>Data</h2>
+  <p><a class="btn" href="{{ url_for('export_csv') }}">Export items as CSV</a>
+     <a class="btn" href="{{ url_for('backup_db') }}">Download database backup</a>
+     <a class="btn" href="{{ url_for('import_homebox') }}">Import from Homebox</a></p>
+  <p class="hint">Photos live in the <code>/data/photos</code> folder of the container volume – back up the whole <code>/data</code> folder to keep everything.</p>
+</section>
+
+<section>
+  <h2>Descriptors</h2>
+  <p class="hint">These fields appear on every item. Leave them blank where they don't apply.</p>
+  <table class="data descriptors">
+    <tbody>
+    {% for dt in dts %}
+    <tr>
+      <td>
+        <form method="post" class="rename">
+          <input type="hidden" name="action" value="rename_descriptor"><input type="hidden" name="id" value="{{ dt.id }}">
+          <input name="name" value="{{ dt.name }}" aria-label="Descriptor name"><button class="link">Rename</button>
+        </form>
+      </td>
+      <td class="muted small num">{{ usage.get(dt.id, 0) }} used</td>
+      <td class="nowrap">
+        <form method="post" class="inline"><input type="hidden" name="action" value="up"><input type="hidden" name="id" value="{{ dt.id }}"><button class="link" title="Move up" {{ 'disabled' if loop.first }}>▲</button></form>
+        <form method="post" class="inline"><input type="hidden" name="action" value="down"><input type="hidden" name="id" value="{{ dt.id }}"><button class="link" title="Move down" {{ 'disabled' if loop.last }}>▼</button></form>
+        <form method="post" class="inline" data-confirm="Delete '{{ dt.name }}'? Its values on {{ usage.get(dt.id, 0) }} item(s) will be removed."><input type="hidden" name="action" value="delete_descriptor"><input type="hidden" name="id" value="{{ dt.id }}"><button class="link danger">Delete</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" class="filters">
+    <input type="hidden" name="action" value="add_descriptor">
+    <input name="name" placeholder="New descriptor e.g. Chipset, ROM version, Colour" required>
+    <button>Add</button>
+  </form>
+</section>
+</div>
+{% endblock %}

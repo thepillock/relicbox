@@ -1,0 +1,146 @@
+"""SQLite storage for the collection inventory."""
+import sqlite3
+
+from flask import g, current_app
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS locations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id   INTEGER REFERENCES locations(id),
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS descriptor_types (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS items (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref                  TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    barcode              TEXT,
+    name                 TEXT NOT NULL,
+    description          TEXT,
+    notes                TEXT,
+    quantity             INTEGER NOT NULL DEFAULT 1,
+    location_id          INTEGER REFERENCES locations(id),
+    parent_id            INTEGER REFERENCES items(id),
+    harvested_from_id    INTEGER REFERENCES items(id),
+    status               TEXT NOT NULL DEFAULT 'active',
+    value                REAL,
+    purchase_date        TEXT,
+    purchase_price       REAL,
+    purchase_seller      TEXT,
+    purchase_platform    TEXT,
+    disposal_date        TEXT,
+    disposal_price       REAL,
+    disposal_destination TEXT,
+    broken_date          TEXT,
+    created_at           TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at           TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_items_parent    ON items(parent_id);
+CREATE INDEX IF NOT EXISTS ix_items_location  ON items(location_id);
+CREATE INDEX IF NOT EXISTS ix_items_harvested ON items(harvested_from_id);
+CREATE INDEX IF NOT EXISTS ix_items_barcode   ON items(barcode);
+CREATE INDEX IF NOT EXISTS ix_items_status    ON items(status);
+
+CREATE TABLE IF NOT EXISTS item_descriptors (
+    item_id            INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    descriptor_type_id INTEGER NOT NULL REFERENCES descriptor_types(id) ON DELETE CASCADE,
+    value              TEXT NOT NULL,
+    PRIMARY KEY (item_id, descriptor_type_id)
+);
+
+CREATE TABLE IF NOT EXISTS photos (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    filename   TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_photos_item ON photos(item_id);
+"""
+
+DEFAULT_SETTINGS = {
+    "schema_version": "2",
+    "label_format": "qr",
+    "public_url": "",
+    "ref_prefix": "RC-",
+    "ref_digits": "5",
+    "ref_next": "1",
+    "currency": "£",
+    "site_name": "RelicBox",
+}
+
+DEFAULT_DESCRIPTORS = ["Manufacturer", "Model", "Serial number", "Version / revision"]
+
+
+def connect(path):
+    conn = sqlite3.connect(path, timeout=15)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def init_db(path):
+    conn = connect(path)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.executescript(SCHEMA)
+    migrate(conn)
+    for k, v in DEFAULT_SETTINGS.items():
+        conn.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (k, v))
+    if conn.execute("SELECT COUNT(*) FROM descriptor_types").fetchone()[0] == 0:
+        for i, name in enumerate(DEFAULT_DESCRIPTORS):
+            conn.execute("INSERT INTO descriptor_types(name, sort_order) VALUES (?, ?)", (name, i))
+    conn.commit()
+    conn.close()
+
+
+def _columns(conn, table):
+    return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def migrate(conn):
+    """Add columns introduced after the first release (safe to run repeatedly)."""
+    # legacy_id: the ID an item/location had in another system (e.g. Homebox UUID), so old QR labels still work.
+    for table in ("items", "locations"):
+        if "legacy_id" not in _columns(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN legacy_id TEXT")
+        conn.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_legacy ON {table}(legacy_id)")
+    conn.execute("UPDATE settings SET value = '2' WHERE key = 'schema_version'")
+
+
+def get_db():
+    if "db" not in g:
+        g.db = connect(current_app.config["DB_PATH"])
+    return g.db
+
+
+def close_db(_exc=None):
+    conn = g.pop("db", None)
+    if conn is not None:
+        conn.close()
+
+
+def q(sql, args=(), one=False):
+    cur = get_db().execute(sql, args)
+    rows = cur.fetchall()
+    return (rows[0] if rows else None) if one else rows
+
+
+def ex(sql, args=()):
+    cur = get_db().execute(sql, args)
+    return cur.lastrowid
+
+
+def commit():
+    get_db().commit()

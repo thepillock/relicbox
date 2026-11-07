@@ -1,0 +1,25 @@
+<dialog id="scan-dialog" class="scan-dialog">
+  <div class="scanner">
+    <video id="dlg-video" playsinline muted></video>
+    <div class="scan-frame"></div>
+    <p class="scan-status" id="dlg-status"></p>
+  </div>
+  <button type="button" class="btn" id="dlg-close">Cancel</button>
+</dialog>
+<script src="{{ url_for('static', filename='vendor/zxing.min.js') }}" onerror="void 0"></script>
+<script src="{{ url_for('static', filename='scanner.js') }}"></script>
+<script>
+(function () {
+  const dlg = document.getElementById('scan-dialog');
+  let target = null;
+  document.querySelectorAll('[data-scan-into]').forEach(btn => btn.addEventListener('click', () => {
+    target = document.getElementById(btn.dataset.scanInto);
+    dlg.showModal();
+    Scanner.start(document.getElementById('dlg-video'), document.getElementById('dlg-status'), code => {
+      target.value = code; Scanner.stop(); dlg.close();
+    });
+  }));
+  document.getElementById('dlg-close').addEventListener('click', () => { Scanner.stop(); dlg.close(); });
+  dlg.addEventListener('close', () => Scanner.stop());
+})();
+</script>

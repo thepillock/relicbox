@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import item_cards, location_options with context %}
+{% block title %}Items{% endblock %}
+{% block body %}
+<div class="pagehead">
+  <h1>Items</h1>
+  <a class="btn primary" href="{{ url_for('item_new', location_id=loc or '') }}">+ Add item</a>
+</div>
+<form class="filters" action="{{ url_for('items_list') }}">
+  <input type="search" name="q" value="{{ qtext }}" placeholder="Keywords, or descriptor:value e.g. model:a500">
+  <select name="status">
+    <option value="all" {{ 'selected' if status == 'all' }}>Any status</option>
+    {% for k, v in STATUSES.items() %}<option value="{{ k }}" {{ 'selected' if status == k }}>{{ v }}</option>{% endfor %}
+  </select>
+  <select name="location">{{ location_options(locations, loc or '', 'Any location') }}</select>
+  <button>Filter</button>
+</form>
+<p class="muted summary">{{ rows|length }} item{{ '' if rows|length == 1 else 's' }} · {{ total_value|money }}
+  · <a href="{{ url_for('labels', q=qtext, status=status, location=loc or '') }}">Print labels for these</a></p>
+{{ item_cards(rows) }}
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Labels{% endblock %}
+{% block body %}
+<div class="pagehead noprint">
+  <h1>Labels <small class="muted">{{ items|length }}</small></h1>
+  <div class="actions">
+    <label class="check">Size
+      <select id="label-size">
+        <option value="62x29">62 × 29 mm</option>
+        <option value="50x25">50 × 25 mm</option>
+        <option value="89x36">89 × 36 mm</option>
+        <option value="a4">A4 sheet (3 × 8)</option>
+      </select></label>
+    <button class="btn primary" onclick="window.print()">Print</button>
+    <a class="btn" href="{{ back }}">Back</a>
+  </div>
+</div>
+<div class="labels size-62x29" id="labels">
+  {% for it in items %}
+  {% set extra = it.descriptors[:2] | map(attribute='value') | join(' · ') %}
+  {% if label_format == 'code128' %}
+  <div class="label">
+    <img src="{{ url_for('barcode_svg', text=it.ref) }}" alt="">
+    <div class="l-ref">{{ it.ref }}</div>
+    <div class="l-name">{{ it.name }}</div>
+    {% if extra %}<div class="l-extra">{{ extra }}</div>{% endif %}
+  </div>
+  {% else %}
+  <div class="label qr">
+    <img src="{{ url_for('qr_svg', d=item_qr_url(it.ref)) }}" alt="">
+    <div class="l-text">
+      <div class="l-ref">{{ it.ref }}</div>
+      <div class="l-name">{{ it.name }}</div>
+      {% if extra %}<div class="l-extra">{{ extra }}</div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const sel = document.getElementById('label-size'), box = document.getElementById('labels');
+const saved = localStorage.getItem('labelSize'); if (saved) sel.value = saved;
+function apply() { box.className = 'labels size-' + sel.value; try { localStorage.setItem('labelSize', sel.value); } catch (e) {} }
+sel.addEventListener('change', apply); apply();
+</script>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import item_cards with context %}
+{% block title %}Home{% endblock %}
+{% block body %}
+<section class="hero">
+  <form action="{{ url_for('items_list') }}" class="bigsearch">
+    <input type="search" name="q" placeholder="Search by name, ref, serial, seller… (try manufacturer:commodore)" autofocus>
+    <input type="hidden" name="status" value="all">
+    <button>Search</button>
+  </form>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('item_new') }}">+ Add item</a>
+    <a class="btn" href="{{ url_for('scan') }}">Scan barcode</a>
+    <a class="btn" href="{{ url_for('location_new') }}">+ Add location</a>
+  </div>
+</section>
+
+<section class="stats">
+  <a class="stat" href="{{ url_for('items_list') }}"><b>{{ stats.active or 0 }}</b><span>items in collection</span></a>
+  <a class="stat" href="{{ url_for('reports') }}"><b>{{ (stats.value or 0)|money }}</b><span>collection value</span></a>
+  <a class="stat" href="{{ url_for('items_list', status='sold') }}"><b>{{ stats.sold or 0 }}</b><span>sold · {{ (stats.income or 0)|money }}</span></a>
+  <a class="stat" href="{{ url_for('items_list', status='broken') }}"><b>{{ stats.broken or 0 }}</b><span>broken for spares</span></a>
+  <a class="stat" href="{{ url_for('locations') }}"><b>{{ nloc }}</b><span>locations</span></a>
+</section>
+
+<h2>Recently updated</h2>
+{{ item_cards(recent) }}
+{% endblock %}
