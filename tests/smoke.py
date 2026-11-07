@@ -211,4 +211,12 @@ assert conn.execute("SELECT value, work_cost FROM items").fetchone() == (42.0, 0
 conn.close()
 
 print("CSV:\n" + c.get("/export/items.csv").data.decode()[:600])
+# a location deleted while a form was open gives a message, not a server error
+gone = int(re.search(r"/locations/(\d+)", post("/locations/new", {"name": "Doomed"}).request.path).group(1))
+post(f"/locations/{gone}/delete", {})
+for url, data in [("/items/new", {"name": "Orphan", "location_id": str(gone)}),
+                  ("/locations/new", {"name": "Orphan loc", "parent_id": str(gone)})]:
+    r = ok(c.post(url, data=data))
+    assert b"no longer exists" in r.data, url
+
 print("ALL OK", tmp)

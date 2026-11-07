@@ -136,6 +136,18 @@ def now():
     return datetime.datetime.now().isoformat(timespec="seconds")
 
 
+def existing_location_id(raw, errors, what="The location you chose"):
+    """Turn a submitted location id into a real one. If it was deleted meanwhile
+    (e.g. in another tab), add a friendly error instead of failing on save."""
+    loc_id = int_or_none(raw)
+    if loc_id is None:
+        return None
+    if not q("SELECT 1 FROM locations WHERE id = ?", (loc_id,), one=True):
+        errors.append(f"{what} no longer exists. It may have been deleted. Please choose another.")
+        return None
+    return loc_id
+
+
 def int_or_none(s):
     try:
         return int(s)
@@ -583,7 +595,7 @@ def item_form_data(form, existing=None):
             errors.append("An item can't be placed inside itself or one of its own parts.")
             parent = None
     data["parent_id"] = parent["id"] if parent else None
-    data["location_id"] = None if parent else int_or_none(form.get("location_id"))
+    data["location_id"] = None if parent else existing_location_id(form.get("location_id"), errors)
 
     hv_text = (form.get("harvested_from") or "").strip()
     hv = resolve_item(hv_text) if hv_text else None
@@ -933,6 +945,9 @@ def item_breakdown(item_id):
                 elif target["id"] == item_id or (existing and (target["id"] == existing or
                                                                target["id"] in item_descendant_ids(existing))):
                     errors.append(f"'{r['name']}': can't fit a part into the donor or into itself.")
+            if oc == "spare" and r["location"]:
+                existing_location_id(r["location"], errors,
+                                     f"'{r['name'] or 'part'}': the place you chose to store it")
             plan.append((existing, oc, r, target))
 
         if not errors:
@@ -1244,8 +1259,8 @@ def locations():
 
 def location_form_data(form, existing=None):
     name = (form.get("name") or "").strip()
-    parent_id = int_or_none(form.get("parent_id"))
     errors = []
+    parent_id = existing_location_id(form.get("parent_id"), errors, "The parent location you chose")
     if not name:
         errors.append("Name is required.")
     if existing and parent_id:
