@@ -185,6 +185,7 @@ form.rename input { flex: 1; }
 .part-row[data-outcome=given_away] .f-dest { display: flex !important; }
 .part-row[data-outcome=sold] .lbl-price { display: inline !important; }
 .part-row[data-outcome=sold] .lbl-value { display: none; }
+.part-row[data-outcome=spare] .f-value, .part-row[data-outcome=given_away] .f-value { display: none; }
 .part-row[data-outcome=leave] { border-left-color: var(--line); opacity: .75; }
 .part-row[data-outcome=leave] .f-value, .part-row[data-outcome=leave] .f-desc { display: none; }
 .part-row[data-outcome=scrapped] .f-value { display: none; }
@@ -246,3 +247,4 @@ table.data tr.current td { font-weight: 600; }
 .tablewrap + .addbox { margin-top: .6rem; }
 #work, #value { margin-bottom: 1.5rem; }
 .valline { margin: .8rem 0 0; }
+.addbox .formbar, .log-edit .formbar { position: static; background: none; padding-bottom: 0; }

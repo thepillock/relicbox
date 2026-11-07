@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Fit {{ item.name }}{% endblock %}
+{% block body %}
+<div class="pagehead">
+  <div><h1>Fit into another item</h1>
+  <div class="sub"><code class="ref">{{ item.ref }}</code> {{ item.name }}{% if donor %} · from <a href="{{ url_for('item_view', item_id=donor.id) }}">{{ donor.ref }} {{ donor.name }}</a>{% endif %}</div></div>
+  <a class="btn" href="{{ url_for('item_view', item_id=item.id) }}">Cancel</a>
+</div>
+<form method="post" class="stack">
+  <fieldset>
+    <div class="grid">
+      <label class="wide">Fitted into item<input name="target" class="item-picker" list="item-options" required placeholder="ref or name of the repaired item" autocomplete="off"></label>
+      <label>Date<input type="date" name="date" value="{{ today }}"></label>
+      <label>Internal price ({{ currency }})<input name="price" inputmode="decimal" placeholder="optional"></label>
+      <label class="wide">Notes<input name="notes" placeholder="e.g. replaced faulty Gayle"></label>
+    </div>
+    <p class="hint">This adds an entry to the repaired item's work log.{% if donor %} Any internal price is a work cost on that item and income for {{ donor.ref }}.{% endif %}
+      If you charged someone else for the part instead, use <a href="{{ url_for('item_dispose', item_id=item.id, kind='sold') }}">Sold / given away</a>.</p>
+  </fieldset>
+  <div class="formbar"><button class="btn primary">Fit part</button></div>
+</form>
+{% endblock %}

@@ -17,17 +17,17 @@ Python/Flask + SQLite, one container, no external services. Everything (database
 - **Work log**: a dated entry for each repair or job, with what was done and what it cost. The item page shows the spend: purchase + work = total spent, and the sale price and profit once sold.
 - **Valuations**: a separate, dated record of what each item is worth (e.g. for insurance), each with a source. They don't affect spend or profit; lists and reports show them as their own total.
 - **Sold / given away / scrapped**: date, price and destination. Optionally the contents go with the item.
-- **Break for spares**: mark a donor item as broken down and list the parts removed. Each part becomes its own item (with a reference number and a link back to the donor) and has one of these outcomes:
-  - *Keep as spare*: goes to a location with an attached value.
-  - *Used to repair another item*: gets nested inside the repaired item, so its history shows where it came from.
-  - *Sold separately*: records the sale price and buyer.
+- **Breaking for spares**: a donor leaves the collection and is treated like a sale whose price builds up part by part. List the parts as you take them off. Each part becomes its own item (with a reference number and a link back to the donor) and has one of these outcomes:
+  - *Keep as spare*: goes to a location. It earns nothing until it's sold or fitted.
+  - *Fitted into one of my items*: gets nested inside the repaired item, with an optional internal price. That price is income for the donor and a work log cost on the repaired item.
+  - *Sold / charged to someone*: records the price and who to.
   - *Given away / scrapped*.
   
-  Parts already recorded inside the donor can be processed the same way. You can add more parts later. Outcomes are worked out from where each part is *now*, so if a spare is later fitted or sold, the donor's figures update automatically.
+  Parts already recorded inside the donor can be processed the same way, and you can add more parts later. A spare on the shelf has **Fit into another item** and **Sold / given away** buttons, and its income still goes to the donor even after the donor is finished. When nothing more will come off the donor, use **Finished: dispose of shell** (selling the shell adds to its income).
 - **Search**: keywords across name, ref, barcode, descriptors, notes, seller etc. Use `descriptor:value` to filter on one descriptor, e.g. `manufacturer:commodore model:a1200`.
 - **Reports**:
-  - Collection: item count, current value, cost, value per location (sub-locations included) and by any descriptor.
-  - Activity, by year or date range: purchases, sales income (whole items vs parts), profit on whole items, given away, and a table per broken-down item (cost, parts sold, value used in repairs, spares kept, shell value, net).
+  - Collection: item count, spend and valuations, per location (sub-locations included) and by any descriptor.
+  - Activity, by year or date range: purchases, work spend, sales income (whole items vs parts), profit on whole items, given away, and a table per donor (cost, income from parts, net).
 - CSV export and a one-click database backup.
 - Optional single password (`APP_PASSWORD`).
 - Mobile-friendly with dark mode.
@@ -81,7 +81,7 @@ Chrome on Android uses the built-in barcode detector. iPhone Safari and Firefox 
    - Locations you used as a status ("Sold", "Breaking for Parts") become item statuses instead of places.
    - Photos aren't in Homebox's export, so they need adding again.
    - It's safe to run the import again: items that were already imported are skipped.
-3. The import summary lists anything to tidy up. That includes items to re-record with **Break for spares**, and values a spreadsheet has damaged.
+3. The import summary lists anything to tidy up. That includes items to re-record with **Breaking for spares**, and values a spreadsheet has damaged.
 
 **Existing Homebox QR labels keep working.** They encode `http://<homebox>/item/<id>`, and RelicBox stores each item's and location's Homebox ID:
 - On RelicBox's **Scan** page, an old label opens the matching item or location.
@@ -108,9 +108,9 @@ Spend and valuations are two separate running totals:
 
 - **Spent** = purchase price + all work log costs. Profit on a sale is the sale price minus this.
 - **Valued at** = the latest valuation of each item that has one. Items without a valuation add nothing. Parts listed inside an item are valued separately, so value a computer without the parts you've listed inside it.
-- Values attached during **Break for spares** (shell value, spare and repair parts) are recorded as valuations with the breakdown date, and are what the breakdown figures below use.
-- **Recovered from a breakdown** = parts sold (sale price) + parts used in repairs (attached value) + parts kept as spares (attached value).
-- **Net for a breakdown** = recovered + remaining shell value (or what the shell sold for) − what the donor cost (purchase + work).
+- **Donor income** = what its parts were sold or charged for + internal prices of parts fitted into your own items + what the shell sold for. A part broken down further passes on its own parts' income. Spares still on the shelf count for nothing until used.
+- **Donor net** = donor income − what the donor cost (purchase + work). It shows as "so far" until the donor is finished.
+- A harvested part has no spend of its own (that's on the donor). An internal price makes it a work cost on the item it was fitted into.
 
 ## Backups
 

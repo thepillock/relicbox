@@ -64,11 +64,23 @@ post(f"/items/{a1200}/breakdown", {
 })
 r = ok(c.get(f"/items/{a1200}"))
 html = r.data.decode()
-assert "Broken for spares" in html and "Used to repair another item" in html and "Sold separately" in html
-assert "£85.00" in html, "recovered should be 15+40+30"
-# net = 85 + 5 - 80 = 10
-assert "£10.00" in html
-r = ok(c.get(f"/items/{a1200w}")); assert b"Gayle chip" in r.data  # now inside repaired machine
+assert "Breaking for spares" in html and "Fitted into another item" in html and "Sold / charged to someone" in html
+# donor income = gayle internal price 15 + PSU sold 40; the keyboard spare earns nothing until used
+assert "£55.00" in html and "Loss so far" in html and "£25.00" in html   # 55 - 80
+assert "Still on the shelf as spares (1)" in html
+r = ok(c.get(f"/items/{a1200w}")); html = r.data.decode()
+assert "Gayle chip" in html and "Fitted Gayle chip (RC-00004, from RC-00003)" in html  # in work log
+assert "£165.00" in html                                                              # 150 + 15 internal price
+# the spare keyboard is fitted later into the A500 at £20: donor income rises to 75
+kb = q_id = None
+from app import app as _app0
+from db import q as _q0
+with _app0.app_context():
+    kb = _q0("SELECT id FROM items WHERE name = 'Keyboard'", one=True)["id"]
+ok(c.get(f"/items/{kb}/fit"))
+post(f"/items/{kb}/fit", {"target": "RC-00001", "price": "20", "date": "2025-07-15"})
+html = ok(c.get(f"/items/{a1200}")).data.decode()
+assert "£75.00" in html and "Loss so far" in html and "£5.00" in html
 # bad target error
 r = post(f"/items/{a1200}/breakdown", {"row_existing_id": [""], "row_name": ["X"], "row_outcome": ["repair"],
         "row_value": [""], "row_location": [""], "row_target": ["nope"], "row_dest": [""], "row_desc": [""]})
@@ -77,13 +89,13 @@ assert b"find the item it repaired" in r.data
 # sell the A500 whole
 post(f"/items/{a500}/dispose", {"kind": "sold", "date": "2025-08-01", "price": "200", "destination": "Facebook", "with_contents": "1"})
 r = ok(c.get(f"/items/{a501}")); assert b"With RC-00001" in r.data
-r = ok(c.get(f"/items/{a500}")); assert b"profit" in r.data and b"\xc2\xa380.00" in r.data
+r = ok(c.get(f"/items/{a500}")); assert b"Profit" in r.data and b"\xc2\xa360.00" in r.data  # 200 - (120 + 20 keyboard)
 
 # search
 r = ok(c.get("/items?q=commodore&status=all")); assert b"Amiga 500" in r.data and b"Amiga 1200 (dead)" in r.data
 r = ok(c.get("/items?q=manufacturer:commodore+a500&status=all")); assert b"Amiga 500" in r.data and b"1200" not in r.data
-r = ok(c.get("/items?q=keyboard&status=active")); assert b"Keyboard" in r.data
-r = ok(c.get("/items?status=active&location=2")); assert b"Keyboard" in r.data and b"A501" not in r.data  # A501 went with sold A500? still inside
+r = ok(c.get("/items?q=keyboard&status=all")); assert b"Keyboard" in r.data
+r = ok(c.get("/items?status=active&location=2")); assert b"A501" not in r.data
 r = ok(c.get("/api/items?q=gay")); assert r.json[0]["ref"] == "RC-00004"
 
 # scan lookup
@@ -139,11 +151,14 @@ with _app.app_context():
     row = _q("SELECT status, disposal_price FROM items WHERE id = ?", (sneaky,), one=True)
     assert row["status"] == "active" and row["disposal_price"] is None
 
-# --- breakdown values became valuations -----------------------------------------
+# --- breakdowns no longer create valuations -------------------------------------
 with _app.app_context():
-    v = _q("SELECT * FROM valuations WHERE item_id = ?", (a1200,))
-    assert len(v) == 1 and v[0]["value"] == 5 and v[0]["source"] == "Shell value after breakdown"
-    assert _q("SELECT value FROM items WHERE id = ?", (gayle,), one=True)["value"] == 15
+    assert _q("SELECT COUNT(*) AS n FROM valuations", one=True)["n"] == 0
+# donor finished: shell sold for 10 adds to income; a spare used afterwards still counts
+post(f"/items/{a1200}/dispose", {"kind": "sold", "price": "10", "date": "2025-09-01"})
+html = ok(c.get(f"/items/{a1200}")).data.decode()
+# (the repaired A1200 was deleted above, taking the Gayle's £15 fit entry with it)
+assert "Shell sold for" in html and "so far" not in html and "£60.00" in html and "Loss" in html  # 40+20+10 - 80
 
 # --- work log and valuations -----------------------------------------------------
 r = post("/items/new", {"name": "Amiga 600", "purchase_price": "100", "purchase_date": "2025-01-01"})

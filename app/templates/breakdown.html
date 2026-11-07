@@ -20,7 +20,7 @@
         {% endfor %}
       </select>
     </label>
-    <label class="f-value"><span><span class="lbl-value">Value attached</span><span class="lbl-price">Sale price</span> ({{ currency }})</span>
+    <label class="f-value"><span><span class="lbl-value">Internal price (optional)</span><span class="lbl-price">Charged</span> ({{ currency }})</span>
       <input name="row_value" inputmode="decimal" value="{{ r.value }}"></label>
     <label class="f-spare">Store in
       <select name="row_location">{{ location_options(locations, r.location or '', 'Same place as donor') }}</select></label>
@@ -35,13 +35,13 @@
 
 {% block body %}
 <div class="pagehead">
-  <div><h1>Break for spares</h1>
+  <div><h1>Breaking for spares</h1>
   <div class="sub"><code class="ref">{{ donor.ref }}</code> {{ donor.name }}{% if donor.purchase_price is not none %} · bought for {{ donor.purchase_price|money }}{% endif %}</div></div>
   <a class="btn" href="{{ url_for('item_view', item_id=donor.id) }}">Cancel</a>
 </div>
 
 {% if parts %}
-<details class="already"><summary>{{ parts|length }} part(s) already recorded · {{ part_totals.recovered|money }} recovered</summary>
+<details class="already"><summary>{{ parts|length }} part(s) already recorded · {{ part_totals.income|money }} income so far</summary>
   {% include '_parts_table.html' %}
 </details>
 {% endif %}
@@ -51,18 +51,18 @@
     <legend>Breakdown</legend>
     <div class="grid">
       <label>Date<input type="date" name="date" value="{{ today }}"></label>
-      <label>Shell value after removing parts ({{ currency }})<input name="donor_value" inputmode="decimal" placeholder="leave blank to keep {{ donor.value|money('none') }}"></label>
       <label class="wide">Notes<input name="notes" placeholder="e.g. dead CPU, board cracked"></label>
     </div>
     {% if donor.status != 'broken' %}
-    <label class="check"><input type="checkbox" name="mark_broken" value="1" checked> Mark {{ donor.ref }} as broken for spares</label>
+    <label class="check"><input type="checkbox" name="mark_broken" value="1" checked> Mark {{ donor.ref }} as breaking for spares (it leaves the collection)</label>
     {% endif %}
   </fieldset>
 
   <fieldset>
     <legend>Parts removed</legend>
     <p class="hint">Each part gets its own reference number so it can be tracked, labelled, sold or fitted into another item later.
-      "Value attached" is what the part is worth to you – it counts towards what you recovered from this item.</p>
+      The donor is treated like a sale that builds up part by part: what you charge for parts, and any internal price for parts fitted into your own items, is its income.
+      An internal price is also added to the repaired item's work log as a cost. Spares kept on the shelf add income when they're sold or fitted later.</p>
     <div id="rows">
       {% for r in rows %}{{ part_row(r, r.existing_id) }}{% endfor %}
     </div>

@@ -17,10 +17,11 @@
     <a class="btn primary" href="{{ url_for('item_edit', item_id=item.id) }}">Edit</a>
     {% if item.status == 'active' %}
       <a class="btn" href="{{ url_for('item_dispose', item_id=item.id, kind='sold') }}">Sold / given away</a>
-      <a class="btn" href="{{ url_for('item_breakdown', item_id=item.id) }}">Break for spares</a>
+      <a class="btn" href="{{ url_for('item_breakdown', item_id=item.id) }}">Breaking for spares</a>
+      {% if item.harvested_from_id %}<a class="btn" href="{{ url_for('item_fit', item_id=item.id) }}">Fit into another item</a>{% endif %}
     {% elif item.status == 'broken' %}
       <a class="btn" href="{{ url_for('item_breakdown', item_id=item.id) }}">Record more parts</a>
-      <a class="btn" href="{{ url_for('item_dispose', item_id=item.id, kind='scrapped') }}">Dispose of shell</a>
+      <a class="btn" href="{{ url_for('item_dispose', item_id=item.id, kind='scrapped') }}">Finished: dispose of shell</a>
     {% endif %}
     {% if item.status != 'active' %}
       <form method="post" action="{{ url_for('item_reinstate', item_id=item.id) }}" class="inline"><button class="btn">Back in collection</button></form>
@@ -52,14 +53,21 @@
       <tr><td>Purchase</td><td>{{ item.purchase_price|money }}</td></tr>
       <tr><td><a href="#work">Work done</a>{% if work %} ({{ work|length }} entr{{ 'y' if work|length == 1 else 'ies' }}){% endif %}</td><td>{{ item.work_cost|money }}</td></tr>
       <tr class="net"><td>Total spent</td><td>{{ cost_basis(item)|money }}</td></tr>
-      {% if item.status == 'sold' %}
+      {% if item.broken_date %}
+      <tr><td><a href="#parts">Income from parts</a> ({{ parts|length }})</td><td>{{ (part_totals.income - part_totals.shell)|money }}</td></tr>
+      {% if item.status == 'sold' %}<tr><td>Shell sold for</td><td>{{ part_totals.shell|money }}</td></tr>{% endif %}
+      {% set pl = part_totals.income - cost_basis(item) %}
+      <tr class="net"><td>{{ 'Profit' if pl >= 0 else 'Loss' }}{{ ' so far' if not part_totals.finished }}</td><td class="{{ 'pos' if pl >= 0 else 'neg' }}">{{ pl|abs|money }}</td></tr>
+      {% elif item.status == 'sold' %}
       <tr><td>Sold for</td><td>{{ item.disposal_price|money }}</td></tr>
-      {% if item.disposal_price is not none and not item.harvested_from_id and not item.broken_date %}
+      {% if item.disposal_price is not none and not item.harvested_from_id %}
       {% set pl = item.disposal_price - cost_basis(item) %}
       <tr class="net"><td>{{ 'Profit' if pl >= 0 else 'Loss' }}</td><td class="{{ 'pos' if pl >= 0 else 'neg' }}">{{ pl|abs|money }}</td></tr>
       {% endif %}{% endif %}
     </table>
     {% if contents_cost %}<p class="hint">Plus {{ contents_cost|money }} spent on the parts recorded inside it.</p>{% endif %}
+    {% if item.broken_date and not part_totals.finished %}<p class="hint">Breaking for spares: income builds up as parts are sold or fitted. Use “Finished: dispose of shell” when nothing more will come off it.</p>{% endif %}
+    {% if item.harvested_from_id %}<p class="hint">Spend on this part is part of its donor's cost. What it brings in counts as the donor's income.</p>{% endif %}
 
     <p class="valline"><span class="muted">Valuation</span>
       {% if latest %}<b>{{ latest.value|money }}</b> <span class="muted small">{{ latest.date }}{% if latest.source %} · {{ latest.source }}{% endif %}</span>
@@ -109,7 +117,7 @@
     {% for w in work %}
     <li>
       <div class="log-head"><span class="log-date">{{ w.date }}</span>{% if w.cost is not none %}<span class="log-cost">{{ w.cost|money }}</span>{% endif %}</div>
-      <div class="log-text">{{ w.description }}</div>
+      <div class="log-text">{{ w.description }}{% if w.part_id %} <a class="small" href="{{ url_for('item_view', item_id=w.part_id) }}">view part</a>{% endif %}</div>
       <details class="log-edit">
         <summary>Edit</summary>
         <form method="post" action="{{ url_for('work_edit', entry_id=w.id) }}" class="stack">
@@ -171,17 +179,9 @@
 </section>
 
 {% if item.broken_date or parts %}
-<section>
-  <h2>Parts harvested{% if item.broken_date %} <small class="muted">broken down {{ item.broken_date }}</small>{% endif %}</h2>
+<section id="parts">
+  <h2>Parts taken off{% if item.broken_date %} <small class="muted">breaking since {{ item.broken_date }}{{ ' · finished' if part_totals.finished }}</small>{% endif %}</h2>
   {% include '_parts_table.html' %}
-  <table class="totals">
-    <tr><td>Bought for</td><td>{{ item.purchase_price|money }}</td></tr>
-    {% if item.work_cost %}<tr><td>Work done</td><td>{{ item.work_cost|money }}</td></tr>{% endif %}
-    <tr><td>Recovered from parts</td><td>{{ part_totals.recovered|money }}</td></tr>
-    <tr><td>{{ 'Shell sold for' if item.status == 'sold' else 'Remaining shell value' }}</td><td>{{ shell|money }}</td></tr>
-    {% set net = part_totals.recovered + shell - cost_basis(item) %}
-    <tr class="net"><td>Net</td><td class="{{ 'pos' if net >= 0 else 'neg' }}">{{ net|money }}</td></tr>
-  </table>
 </section>
 {% endif %}
 

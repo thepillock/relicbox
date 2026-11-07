@@ -15,13 +15,13 @@
 <p>Your old Homebox QR labels will open the matching item from the <a href="{{ url_for('scan') }}">Scan</a> page.</p>
 
 {% if report['broken'] %}
-<h3>Broken for spares: record the parts</h3>
+<h3>Breaking for spares: record the parts</h3>
 <p class="hint">These were in your "breaking for parts" location. Their breakdown date is set to today, so correct it and add the parts removed so far.</p>
 <ul>{% for id, ref, name in report['broken'] %}<li><a href="{{ url_for('item_breakdown', item_id=id) }}"><code class="ref">{{ ref }}</code> {{ name }}</a></li>{% endfor %}</ul>
 {% endif %}
 {% if report['check'] %}
 <h3>Worth a look</h3>
-<p class="hint">The notes suggest these were broken down or bought for spares, or their container couldn't be matched. You may want to re-record them using <b>Break for spares</b>.</p>
+<p class="hint">The notes suggest these were broken down or bought for spares, or their container couldn't be matched. You may want to re-record them using <b>Breaking for spares</b>.</p>
 <ul>{% for id, ref, name in report['check'] %}<li><a href="{{ url_for('item_view', item_id=id) }}">{% if ref %}<code class="ref">{{ ref }}</code> {% endif %}{{ name }}</a></li>{% endfor %}</ul>
 {% endif %}
 {% if report['renumbered'] %}

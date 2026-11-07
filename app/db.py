@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS work_log (
     date        TEXT NOT NULL,
     description TEXT NOT NULL,
     cost        REAL,
+    part_id     INTEGER REFERENCES items(id) ON DELETE SET NULL,  -- a donor part fitted by this work
     created_at  TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_work_log_item ON work_log(item_id, date);
@@ -141,6 +142,9 @@ def migrate(conn):
         conn.execute(f"CREATE INDEX IF NOT EXISTS ix_{table}_legacy ON {table}(legacy_id)")
     if "work_cost" not in _columns(conn, "items"):
         conn.execute("ALTER TABLE items ADD COLUMN work_cost REAL NOT NULL DEFAULT 0")
+    if "part_id" not in _columns(conn, "work_log"):
+        conn.execute("ALTER TABLE work_log ADD COLUMN part_id INTEGER REFERENCES items(id) ON DELETE SET NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_work_log_part ON work_log(part_id)")
     # v3: values become a dated history. Keep any single value recorded before that as the first valuation.
     conn.execute("""INSERT INTO valuations(item_id, date, value, source)
                     SELECT id, substr(COALESCE(updated_at, created_at, date('now')), 1, 10), value,

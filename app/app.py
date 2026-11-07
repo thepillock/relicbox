@@ -62,14 +62,14 @@ STATUSES = {
     "active": "In collection",
     "sold": "Sold",
     "given_away": "Given away",
-    "broken": "Broken for spares",
+    "broken": "Breaking for spares",
     "scrapped": "Scrapped",
 }
 PART_OUTCOMES = {
     "leave": "Leave inside",
     "spare": "Keep as spare",
-    "repair": "Used to repair another item",
-    "sold": "Sold separately",
+    "repair": "Fitted into one of my items",
+    "sold": "Sold / charged to someone",
     "given_away": "Given away",
     "scrapped": "Scrapped",
 }
@@ -292,31 +292,34 @@ def primary_photos(item_ids):
     return out
 
 
-def part_outcome(part):
-    """Derive what happened to a harvested part and the value it recovered."""
+def part_transfers(part_id):
+    """Work-log entries on other items that record this part being fitted (its internal price)."""
+    return q("SELECT * FROM work_log WHERE part_id = ? ORDER BY date, id", (part_id,))
+
+
+def part_outcome(part, _depth=0):
+    """What happened to a harvested part, the income it brought its donor, and when.
+
+    Income is only real money or an internal price: a sale, or the price recorded when it was
+    fitted into one of your own items. Spares on the shelf, parts left inside, given away or
+    scrapped bring nothing (yet). A part broken down further passes on its own parts' income.
+    """
+    transfers = part_transfers(part["id"])
+    if transfers:
+        return "repair", sum(t["cost"] or 0 for t in transfers), transfers[-1]["date"]
     s = part["status"]
     if s == "sold":
-        return "sold", part["disposal_price"] or 0.0
-    if s == "given_away":
-        return "given_away", 0.0
-    if s == "scrapped":
-        return "scrapped", 0.0
-    if s == "broken":
-        return "broken", part["value"] or 0.0
+        return "sold", part["disposal_price"] or 0.0, part["disposal_date"]
+    if s in ("given_away", "scrapped"):
+        return s, 0.0, part["disposal_date"]
+    if part["broken_date"] and _depth < 10:
+        _, totals = breakdown_summary(part["id"], _depth + 1)
+        return "broken", totals["income"], None
     if part["parent_id"] and part["parent_id"] != part["harvested_from_id"]:
-        return "repair", part["value"] or 0.0
+        return "repair", 0.0, None
     if part["parent_id"]:
-        return "leave", part["value"] or 0.0
-    return "spare", part["value"] or 0.0
-
-
-def shell_value(donor):
-    """What's left of a broken-down item: its value, or its sale price if the shell was sold."""
-    if donor["status"] == "sold":
-        return donor["disposal_price"] or 0.0
-    if donor["status"] in ("broken", "active"):
-        return donor["value"] or 0.0
-    return 0.0
+        return "leave", 0.0, None
+    return "spare", 0.0, None
 
 
 # --- value history and work log ------------------------------------------------
@@ -358,19 +361,29 @@ def add_valuation(item_id, value, date=None, source=None, only_if_changed=False)
     refresh_value(item_id)
 
 
-OUTCOME_LABELS = dict(PART_OUTCOMES, broken="Broken down further", leave="Still inside donor")
+OUTCOME_LABELS = dict(PART_OUTCOMES, broken="Broken down further", leave="Still inside donor",
+                      repair="Fitted into another item")
 
 
-def breakdown_summary(donor_id):
+def breakdown_summary(donor_id, _depth=0):
+    """Parts taken from a donor and the donor's income so far.
+
+    A donor is treated like a sale whose price builds up part by part: income = what its parts
+    brought in (sales + internal prices) + what the shell sold for, if it was sold.
+    """
+    donor = q("SELECT * FROM items WHERE id = ?", (donor_id,), one=True)
     parts = q("SELECT * FROM items WHERE harvested_from_id = ? ORDER BY id", (donor_id,))
     rows, totals = [], defaultdict(float)
     for p in parts:
-        oc, val = part_outcome(p)
+        oc, income, date = part_outcome(p, _depth)
         target = q("SELECT id, ref, name FROM items WHERE id = ?", (p["parent_id"],), one=True) \
-            if oc == "repair" else None
-        rows.append({"part": p, "outcome": oc, "value": val, "target": target})
-        totals[oc] += val
-    totals["recovered"] = totals["sold"] + totals["repair"] + totals["spare"] + totals["broken"]
+            if oc == "repair" and p["parent_id"] else None
+        rows.append({"part": p, "outcome": oc, "income": income, "date": date, "target": target})
+        totals[oc] += income
+        totals["n_" + oc] += 1
+    totals["shell"] = (donor["disposal_price"] or 0.0) if donor and donor["status"] == "sold" else 0.0
+    totals["income"] = sum(r["income"] for r in rows) + totals["shell"]
+    totals["finished"] = bool(donor and donor["status"] in ("sold", "given_away", "scrapped"))
     return rows, totals
 
 
@@ -677,7 +690,7 @@ def item_view(item_id):
     return render_template("item_view.html", item=item, ancestors=ancestors, loc_path=loc_path,
                            contents=contents, photos=photos, descriptors=descriptors, donor=donor,
                            parts=parts, part_totals=part_totals, contents_cost=contents_cost,
-                           shell=shell_value(item), valuations=valuations, work=work, latest=latest,
+                           valuations=valuations, work=work, latest=latest,
                            sources=sources, today=today())
 
 
@@ -846,6 +859,45 @@ def work_delete(entry_id):
     return redirect(url_for("item_view", item_id=row["item_id"]) + "#work")
 
 
+def record_fit(part_id, target, price, date, note=None):
+    """A donor part fitted into one of your items: log it on that item, with any internal price.
+
+    The price is a work cost on the repaired item and, through part_id, income for the donor.
+    """
+    part = q("SELECT * FROM items WHERE id = ?", (part_id,), one=True)
+    donor = q("SELECT ref FROM items WHERE id = ?", (part["harvested_from_id"],), one=True) \
+        if part["harvested_from_id"] else None
+    desc = f"Fitted {part['name']} ({part['ref']}" + (f", from {donor['ref']}" if donor else "") + ")"
+    if note:
+        desc += f": {note}"
+    ex("INSERT INTO work_log(item_id, date, description, cost, part_id) VALUES (?, ?, ?, ?, ?)",
+       (target["id"], date, desc, price, part_id))
+    refresh_value(target["id"])
+
+
+@app.route("/items/<int:item_id>/fit", methods=["GET", "POST"])
+def item_fit(item_id):
+    """Fit a spare into another of your items, optionally at an internal price."""
+    part = get_item(item_id)
+    if request.method == "POST":
+        target = resolve_item(request.form.get("target") or "")
+        if not target:
+            flash("Couldn't find that item.", "error")
+        elif target["id"] == item_id or target["id"] in item_descendant_ids(item_id):
+            flash("A part can't be fitted into itself.", "error")
+        else:
+            date = parse_date(request.form.get("date")) or today()
+            ex("UPDATE items SET parent_id = ?, location_id = NULL, status = 'active', updated_at = ? WHERE id = ?",
+               (target["id"], now(), item_id))
+            record_fit(item_id, target, parse_money(request.form.get("price")), date, clean(request.form.get("notes")))
+            commit()
+            flash(f"Fitted into {target['ref']} — {target['name']}", "ok")
+            return redirect(url_for("item_view", item_id=target["id"]) + "#work")
+    donor = q("SELECT * FROM items WHERE id = ?", (part["harvested_from_id"],), one=True) \
+        if part["harvested_from_id"] else None
+    return render_template("fit.html", item=part, donor=donor, today=today())
+
+
 # --- breakdown for spares ---------------------------------------------------
 @app.route("/items/<int:item_id>/breakdown", methods=["GET", "POST"])
 def item_breakdown(item_id):
@@ -887,8 +939,6 @@ def item_breakdown(item_id):
             if f.get("mark_broken") == "1" or donor["status"] == "broken":
                 ex("UPDATE items SET status = 'broken', broken_date = COALESCE(broken_date, ?), updated_at = ? "
                    "WHERE id = ?", (date, now(), item_id))
-            if f.get("donor_value", "").strip() != "":
-                add_valuation(item_id, parse_money(f.get("donor_value")), date, "Shell value after breakdown")
             if clean(f.get("notes")):
                 ex("UPDATE items SET notes = COALESCE(notes || char(10), '') || ? WHERE id = ?",
                    (f"[{date}] {f.get('notes').strip()}", item_id))
@@ -912,7 +962,7 @@ def item_breakdown(item_id):
                     fields["status"] = oc
                     fields["location_id"] = donor_loc
                     fields["disposal_date"] = date
-                    fields["disposal_price"] = val if oc == "sold" else None
+                    fields["disposal_price"] = (val or 0.0) if oc == "sold" else None
                     fields["disposal_destination"] = clean(r["dest"])
                 if existing:
                     if clean(r["desc"]):
@@ -926,8 +976,8 @@ def item_breakdown(item_id):
                                   created_at=now(), purchase_date=None)
                     part_id = ex(f"INSERT INTO items({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
                                  list(fields.values()))
-                if oc not in ("sold", "given_away", "scrapped"):
-                    add_valuation(part_id, val, date, f"Harvested from {donor['ref']}", only_if_changed=True)
+                if oc == "repair":
+                    record_fit(part_id, target, val, date, clean(r["desc"]))
             commit()
             flash(f"Recorded {len(plan)} part(s) from {donor['ref']}", "ok")
             return redirect(url_for("item_view", item_id=item_id))
@@ -936,7 +986,7 @@ def item_breakdown(item_id):
     else:
         for c in children:
             rows.append({"existing_id": str(c["id"]), "name": c["name"], "outcome": "leave",
-                         "value": "" if c["value"] is None else f"{c['value']:.2f}", "location": "",
+                         "value": "", "location": "",
                          "target": "", "dest": "", "desc": "", "ref": c["ref"]})
         rows.append({"existing_id": "", "name": "", "outcome": "spare", "value": "", "location": "",
                      "target": "", "dest": "", "desc": ""})
@@ -1342,15 +1392,14 @@ def reports():
         rows, totals = breakdown_summary(b["id"])
         b["nparts"] = len(rows)
         b["totals"] = totals
-        b["shell"] = shell_value(b)
         b["cost"] = cost_basis(b)
-        b["net"] = totals["recovered"] + b["shell"] - b["cost"]
-        for k in ("sold", "repair", "spare", "broken", "recovered"):
+        b["net"] = totals["income"] - b["cost"]
+        for k in ("sold", "repair", "broken", "shell", "income"):
             bt[k] += totals[k]
+        bt["spares"] += totals["n_spare"]
         bt["cost"] += b["cost"]
-        bt["shell"] += b["shell"]
         bt["parts"] += len(rows)
-    bt["net"] = bt["recovered"] + bt["shell"] - bt["cost"]
+    bt["net"] = bt["income"] - bt["cost"]
 
     # Purchases in range
     bought = [it for it in items.values() if it["purchase_date"] and in_range(it["purchase_date"], start, end)]

@@ -75,8 +75,8 @@
   <div class="stat"><b>{{ purchases.work_count }}</b><span>work log entries · {{ purchases.work_spent|money }}</span></div>
   <div class="stat"><b>{{ sales.count }}</b><span>sold · {{ sales.income|money }} income</span></div>
   <div class="stat"><b>{{ given|length }}</b><span>given away</span></div>
-  <div class="stat"><b>{{ broken|length }}</b><span>broken for spares · {{ bt.parts|int }} parts</span></div>
-  <div class="stat"><b class="{{ 'pos' if bt.net >= 0 else 'neg' }}">{{ bt.net|money }}</b><span>net from breakdowns</span></div>
+  <div class="stat"><b>{{ broken|length }}</b><span>breaking for spares · {{ bt.parts|int }} parts</span></div>
+  <div class="stat"><b class="{{ 'pos' if bt.net >= 0 else 'neg' }}">{{ bt.net|money }}</b><span>net from donors</span></div>
 </section>
 
 <h3>Sales</h3>
@@ -104,28 +104,30 @@
 </div>
 {% endif %}
 
-<h3>Broken for spares</h3>
+<h3>Breaking for spares</h3>
+<p class="hint">A donor counts like a sale that builds up part by part: income is what its parts were sold or charged for, internal prices for parts fitted into your own items, and the shell's sale price. Figures are to date for donors started in this period.</p>
 <table class="totals">
   <tr><td>Donor items cost (purchase + work)</td><td>{{ bt.cost|money }}</td></tr>
-  <tr><td>Parts sold separately</td><td>{{ bt.sold|money }}</td></tr>
-  <tr><td>Parts used to repair other items</td><td>{{ bt.repair|money }}</td></tr>
-  <tr><td>Parts kept as spares</td><td>{{ (bt.spare + bt.broken)|money }}</td></tr>
-  <tr><td>Remaining shells</td><td>{{ bt.shell|money }}</td></tr>
+  <tr><td>Parts sold / charged</td><td>{{ bt.sold|money }}</td></tr>
+  <tr><td>Parts fitted into my items (internal price)</td><td>{{ bt.repair|money }}</td></tr>
+  {% if bt.broken %}<tr><td>From parts broken down further</td><td>{{ bt.broken|money }}</td></tr>{% endif %}
+  <tr><td>Shells sold</td><td>{{ bt.shell|money }}</td></tr>
+  <tr class="net"><td>Income</td><td>{{ bt.income|money }}</td></tr>
   <tr class="net"><td>Net</td><td class="{{ 'pos' if bt.net >= 0 else 'neg' }}">{{ bt.net|money }}</td></tr>
+  {% if bt.spares %}<tr><td class="muted" colspan="2" style="text-align:left">{{ bt.spares|int }} part(s) still on the shelf as spares</td></tr>{% endif %}
 </table>
 {% if broken %}
 <div class="tablewrap">
 <table class="data">
-  <thead><tr><th>Date</th><th>Donor</th><th class="num">Parts</th><th class="num">Cost</th><th class="num">Sold</th><th class="num">Repairs</th><th class="num">Spares</th><th class="num">Net</th></tr></thead>
+  <thead><tr><th>Started</th><th>Donor</th><th class="num">Parts</th><th class="num">Cost</th><th class="num">Income</th><th class="num">Net</th></tr></thead>
   <tbody>
   {% for b in broken %}
     <tr><td>{{ b.broken_date or '' }}</td>
-      <td><a href="{{ url_for('item_view', item_id=b.id) }}"><code class="ref">{{ b.ref }}</code> {{ b.name }}</a></td>
+      <td><a href="{{ url_for('item_view', item_id=b.id) }}"><code class="ref">{{ b.ref }}</code> {{ b.name }}</a>
+        <div class="muted small">{{ 'finished' if b.totals.finished else 'still breaking' }}</div></td>
       <td class="num">{{ b.nparts }}</td>
       <td class="num">{{ b.cost|money('') }}</td>
-      <td class="num">{{ b.totals.sold|money }}</td>
-      <td class="num">{{ b.totals.repair|money }}</td>
-      <td class="num">{{ (b.totals.spare + b.totals.broken)|money }}</td>
+      <td class="num">{{ b.totals.income|money }}</td>
       <td class="num {{ 'pos' if b.net >= 0 else 'neg' }}">{{ b.net|money }}</td></tr>
   {% endfor %}
   </tbody>
