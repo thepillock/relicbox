@@ -324,7 +324,7 @@ tr[data-outcome=spare] .d-target { display: block; }
 
 /* item page layout: three columns, two rows, then the tables */
 .item-layout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem; margin-bottom: .5rem;
-  grid-template-areas: "details notes photo" "purchase money thumbs"; }
+  grid-template-areas: "details notes photo" "purchase money photo"; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .8rem 1rem; min-width: 0; }
 .panel h3 { margin: 0 0 .5rem; }
 .panel .facts { gap: .25rem .9rem; }
@@ -333,9 +333,9 @@ tr[data-outcome=spare] .d-target { display: block; }
 .panel .hint { margin-top: .6rem; }
 .panel .valline { margin: .7rem 0 0; }
 .p-details { grid-area: details; } .p-notes { grid-area: notes; } .p-photo { grid-area: photo; }
-.p-purchase { grid-area: purchase; } .p-money { grid-area: money; } .p-thumbs { grid-area: thumbs; }
+.p-purchase { grid-area: purchase; } .p-money { grid-area: money; }
 .notes-text { white-space: pre-line; max-height: 18rem; overflow: auto; }
-.p-photo { padding: .5rem; display: flex; }
+.p-photo { padding: .5rem; display: flex; flex-direction: column; gap: .6rem; }
 .main-photo { display: block; width: 100%; }
 .main-photo img { display: block; width: 100%; height: 100%; max-height: 22rem; min-height: 12rem; object-fit: contain;
   border-radius: 8px; background: var(--bg); }
@@ -347,12 +347,13 @@ tr[data-outcome=spare] .d-target { display: block; }
 .thumb-btn img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
 .thumbs figure.current .thumb-btn { border-color: var(--accent); }
 .thumbs figcaption { display: flex; justify-content: space-between; font-size: .75rem; padding: .15rem 0; }
-.p-thumbs .upload { margin: .6rem 0 0; }
+.p-photo .upload { margin: 0; }
+.p-photo .thumbs { padding: 0 .2rem; }
 @media (max-width: 900px) {
-  .item-layout { grid-template-columns: 1fr 1fr; grid-template-areas: "photo photo" "thumbs thumbs" "details notes" "purchase money"; }
+  .item-layout { grid-template-columns: 1fr 1fr; grid-template-areas: "photo photo" "details notes" "purchase money"; }
 }
 @media (max-width: 640px) {
-  .item-layout { grid-template-columns: 1fr; grid-template-areas: "photo" "thumbs" "details" "money" "purchase" "notes"; }
+  .item-layout { grid-template-columns: 1fr; grid-template-areas: "photo" "details" "money" "purchase" "notes"; }
 }
 
 /* "Sure?" confirmation on dangerous buttons */

@@ -59,6 +59,23 @@
       </form>
     </div>
     {% endif %}
+    {% if photos %}
+    <div class="thumbs">
+      {% for p in photos %}
+      <figure class="{{ 'current' if loop.first }}">
+        <button type="button" class="thumb-btn" data-full="{{ url_for('media_photo', filename=p.filename) }}" title="Show this photo">
+          <img loading="lazy" src="{{ url_for('media_thumb', filename=p.filename) }}" alt=""></button>
+        <figcaption>
+          {% if not loop.first %}<form method="post" action="{{ url_for('photo_primary', photo_id=p.id) }}" class="inline"><button class="link">Main</button></form>{% else %}<span class="muted">Main</span>{% endif %}
+          <form method="post" action="{{ url_for('photo_delete', photo_id=p.id) }}" class="inline" data-confirm="Delete this photo"><button class="link danger">Delete</button></form>
+        </figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('photo_upload', item_id=item.id) }}" class="upload">
+      <label class="btn small">Add photos<input type="file" name="photos" accept="image/*" multiple hidden data-autosubmit></label>
+    </form>
+    {% endif %}
   </section>
 
   <section class="panel p-purchase">
@@ -72,7 +89,7 @@
   </section>
 
   <section class="panel p-money">
-    <h3>Spend</h3>
+    <h3>Financials</h3>
     {% set parts_income = part_totals.sold %}
     <table class="totals">
       <tr><td>Purchase</td><td>{{ item.purchase_price|money }}</td></tr>
@@ -116,25 +133,6 @@
 
   </section>
 
-  <section class="panel p-thumbs">
-    {% if photos %}
-    <div class="thumbs">
-      {% for p in photos %}
-      <figure class="{{ 'current' if loop.first }}">
-        <button type="button" class="thumb-btn" data-full="{{ url_for('media_photo', filename=p.filename) }}" title="Show this photo">
-          <img loading="lazy" src="{{ url_for('media_thumb', filename=p.filename) }}" alt=""></button>
-        <figcaption>
-          {% if not loop.first %}<form method="post" action="{{ url_for('photo_primary', photo_id=p.id) }}" class="inline"><button class="link">Main</button></form>{% else %}<span class="muted">Main</span>{% endif %}
-          <form method="post" action="{{ url_for('photo_delete', photo_id=p.id) }}" class="inline" data-confirm="Delete this photo"><button class="link danger">Delete</button></form>
-        </figcaption>
-      </figure>
-      {% endfor %}
-    </div>
-    <form method="post" enctype="multipart/form-data" action="{{ url_for('photo_upload', item_id=item.id) }}" class="upload">
-      <label class="btn small">Add photos<input type="file" name="photos" accept="image/*" multiple hidden data-autosubmit></label>
-    </form>
-    {% else %}<p class="muted small">Photo thumbnails appear here.</p>{% endif %}
-  </section>
 </div>
 
 {% set is_donor = item.broken_date %}

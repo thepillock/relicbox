@@ -171,7 +171,7 @@ post(f"/items/{a600}/work", {"date": "2025-02-01", "description": "Recapped", "c
 post(f"/items/{a600}/work", {"date": "2025-03-01", "description": "Cleaned keyboard", "cost": ""})
 assert val600() == {"value": None, "work_cost": 20}
 html = ok(c.get(f"/items/{a600}")).data.decode()
-assert "Recapped" in html and "Total spent" in html and "£120.00" in html and "none recorded" in html
+assert "Recapped" in html and "Financials" in html and "Total spent" in html and "£120.00" in html and "none recorded" in html
 post(f"/items/{a600}/valuations", {"date": "2025-04-01", "value": "150", "source": "eBay sold"})
 post(f"/items/{a600}/valuations", {"date": "2025-03-15", "value": "130", "source": "older"})
 assert val600()["value"] == 150                               # latest by date wins
