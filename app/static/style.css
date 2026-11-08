@@ -353,10 +353,36 @@ tr[data-outcome=spare] .d-target { display: block; }
   .item-layout { grid-template-columns: 1fr 1fr; grid-template-areas: "photo photo" "details notes" "purchase money"; }
 }
 @media (max-width: 640px) {
-  .item-layout { grid-template-columns: 1fr; grid-template-areas: "photo" "details" "money" "purchase" "notes"; }
+  .item-layout { grid-template-columns: 1fr; grid-template-areas: "details" "photo" "money" "purchase" "notes"; }
 }
 
 /* "Sure?" confirmation on dangerous buttons */
 button.armed, .btn.armed, button.link.armed { background: var(--bad) !important; color: #fff !important;
   border-color: var(--bad) !important; padding: .15rem .55rem; border-radius: 6px; }
 .ledger .mt { margin-top: .3rem; }
+
+@media (max-width: 640px) {
+  /* parts taken off: label each amount, hide empty cells, keep totals readable */
+  table.parts td.num[data-label]:not(:empty)::before { content: attr(data-label) " "; font-size: .75rem; color: var(--muted); font-weight: 400; }
+  table.parts td:empty { display: none; }
+  table.parts tfoot tr { gap: .2rem .9rem; }
+  table.parts tfoot td:first-child { flex-basis: 100%; }
+  table.parts tfoot td.num { margin-left: 0; }
+  table.parts tr.view-row td.num { margin-left: 0; }
+  table.parts tr.view-row td.row-actions { margin-left: auto; }
+  /* valuations: date on top, then value, source and Edit on one line */
+  table.vals tr.view-row td:nth-child(2) { flex: none; order: 1; margin-left: 0; font-weight: 600; }
+  table.vals tr.view-row td:nth-child(3) { flex: 1 1 0; order: 2; min-width: 0; color: var(--muted); }
+  table.vals tr.view-row td.row-actions { order: 3; margin-left: auto; }
+  table.vals tr.current td:nth-child(3) { font-weight: 400; }
+}
+@media (max-width: 640px) {
+  table.ledger.parts tfoot tr { display: grid; grid-template-columns: 1fr auto; align-items: baseline;
+                                gap: .1rem .8rem; padding: .35rem .7rem; }
+  table.ledger.parts tfoot tr td { padding: 0; }
+  table.ledger.parts tfoot tr td:first-child { grid-column: 1; grid-row: 1 / span 2; }
+  table.ledger.parts tfoot tr td.num { grid-column: 2; margin-left: 0; text-align: right; }
+  table.ledger.parts tfoot tr.net-row td:first-child { font-weight: 600; color: var(--ink); }
+  table.ledger.parts tr.view-row td.row-actions { order: 6; align-self: center; }
+  table.ledger.parts tr.view-row td:nth-child(3) { flex: 1 1 auto; }
+}

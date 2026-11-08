@@ -215,8 +215,8 @@
         <td><span class="oc oc-{{ r.outcome }}">{{ OUTCOME_LABELS[r.outcome] }}</span>
           {% if r.target %} → <a href="{{ url_for('item_view', item_id=r.target.id) }}">{{ r.target.ref }} {{ r.target.name }}</a>{% endif %}
           {% if r.outcome in ('sold', 'given_away') and r.part.disposal_destination %} → {{ r.part.disposal_destination }}{% endif %}</td>
-        <td class="num">{{ r.moved|money if r.moved else '' }}</td>
-        <td class="num">{{ r.income|money if r.income or (r.outcome == 'sold' and r.part.salvage_value is none) else '' }}</td>
+        <td class="num" data-label="Cost moved">{{ r.moved|money if r.moved else '' }}</td>
+        <td class="num" data-label="Sold for">{{ r.income|money if r.income or (r.outcome == 'sold' and r.part.salvage_value is none) else '' }}</td>
         <td class="row-actions">{% if r.outcome == 'spare' and r.part.status == 'active' %}<a class="link small" href="{{ url_for('item_fit', item_id=r.part.id) }}">Fit</a> {% endif %}<button type="button" class="link" data-edit>Edit</button></td>
       </tr>
       {% set has_amount = r.part.salvage_value is not none or r.outcome in ('spare', 'repair', 'sold') %}
@@ -255,10 +255,10 @@
     </tbody>
     {% if parts %}
     <tfoot>
-      {% if part_totals.moved_spare %}<tr><td colspan="3">Kept as their own items ({{ part_totals.n_spare|int }})</td><td class="num">{{ part_totals.moved_spare|money }}</td><td></td><td></td></tr>{% endif %}
-      {% if part_totals.moved_repair %}<tr><td colspan="3">Added to other items' work logs ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.moved_repair|money }}</td><td></td><td></td></tr>{% endif %}
-      {% if part_totals.sold %}<tr><td colspan="3">Sold ({{ part_totals.n_sold|int }})</td><td></td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>{% endif %}
-      <tr class="net-row"><td colspan="3">Total</td><td class="num">{{ part_totals.moved|money }}</td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>
+      {% if part_totals.moved_spare %}<tr><td colspan="3">Kept as their own items ({{ part_totals.n_spare|int }})</td><td class="num" data-label="Cost moved">{{ part_totals.moved_spare|money }}</td><td></td><td></td></tr>{% endif %}
+      {% if part_totals.moved_repair %}<tr><td colspan="3">Added to other items' work logs ({{ part_totals.n_repair|int }})</td><td class="num" data-label="Cost moved">{{ part_totals.moved_repair|money }}</td><td></td><td></td></tr>{% endif %}
+      {% if part_totals.sold %}<tr><td colspan="3">Sold ({{ part_totals.n_sold|int }})</td><td></td><td class="num" data-label="Sold for">{{ part_totals.sold|money }}</td><td></td></tr>{% endif %}
+      <tr class="net-row"><td colspan="3">Total</td><td class="num" data-label="Cost moved">{{ part_totals.moved|money }}</td><td class="num" data-label="Sold for">{{ part_totals.sold|money }}</td><td></td></tr>
     </tfoot>
     {% endif %}
   </table>
@@ -280,7 +280,7 @@
   {% endfor %}
   <datalist id="val-sources">{% for s in sources %}<option value="{{ s }}">{% endfor %}</datalist>
   <div class="tablewrap" {{ 'hidden' if not valuations }}>
-  <table class="data ledger">
+  <table class="data ledger vals">
     <thead><tr><th class="c-date">Date</th><th class="num c-amt">Value</th><th>Source</th><th class="c-act"></th></tr></thead>
     <tbody>
       <tr class="new-row" hidden>
