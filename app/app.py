@@ -434,7 +434,9 @@ def breakdown_summary(donor_id, _depth=0):
         oc, moved, income, date = part_flow(p)
         target = q("SELECT id, ref, name FROM items WHERE id = ?", (p["parent_id"],), one=True) \
             if oc in ("repair", "spare") and p["parent_id"] else None
-        rows.append({"part": p, "outcome": oc, "moved": moved, "income": income, "date": date, "target": target})
+        rows.append({"part": p, "outcome": oc, "moved": moved, "income": income,
+                     "date": p["taken_off_date"] or date, "target": target,
+                     "transfer": part_transfers(p["id"])[-1] if oc == "repair" else None})
         totals["moved"] += moved
         totals["moved_" + oc] += moved
         totals["sold"] += income
@@ -498,6 +500,12 @@ def decorate(rows):
     for r in rows:
         r["photo"] = photos.get(r["id"])
         r["container"] = items_by_id.get(r["parent_id"]) if r["parent_id"] else None
+        chain, seen, pid = [], {r["id"]}, r["parent_id"]
+        while pid and pid in items_by_id and pid not in seen:
+            seen.add(pid)
+            chain.append(items_by_id[pid])
+            pid = items_by_id[pid]["parent_id"]
+        r["containers"] = chain
         r["loc_path"] = location_path(effective_location_id(r, items_by_id), loc_by_id)
     return rows
 
@@ -665,6 +673,10 @@ def item_form_data(form, existing=None):
     parent = resolve_item(parent_text) if parent_text else None
     if parent_text and not parent:
         errors.append(f"Couldn't find container item '{parent_text}'.")
+    if parent and parent["status"] != "active" and not (existing and parent["id"] == existing["parent_id"]):
+        errors.append(f"{parent['ref']} {parent['name']} is {STATUSES[parent['status']].lower()}. "
+                      "Choose an item that's still in the collection.")
+        parent = None
     if parent and existing:
         if parent["id"] == existing["id"] or parent["id"] in item_descendant_ids(existing["id"]):
             errors.append("An item can't be placed inside itself or one of its own parts.")
@@ -1003,6 +1015,8 @@ def item_fit(item_id):
     part = get_item(item_id)
     if request.method == "POST":
         target = resolve_item(request.form.get("target") or "")
+        if target and target["status"] != "active":
+            target = None
         if not target:
             flash("Couldn't find that item.", "error")
         elif target["id"] == item_id or target["id"] in item_descendant_ids(item_id):
@@ -1044,6 +1058,7 @@ def apply_part(donor_id, donor_loc, existing, oc, r, target, date):
         "disposal_destination": None,
         "salvage_value": None,
         "purchase_date": donor["purchase_date"],
+        "taken_off_date": date,
         "updated_at": now(),
     }
     if oc == "spare":
@@ -1072,7 +1087,7 @@ def apply_part(donor_id, donor_loc, existing, oc, r, target, date):
         part_id = existing
     else:
         # a new part's "added" date is the day it came off the donor
-        fields.update(ref=allocate_ref(), name=r["name"].strip(), notes=note,
+        fields.update(ref=allocate_ref(), name=r["name"].strip(), notes=note, taken_off_new=1,
                       created_at=date if date != today() else now())
         part_id = ex(f"INSERT INTO items({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
                      list(fields.values()))
@@ -1110,10 +1125,13 @@ def item_breakdown(item_id):
             target = None
             if oc == "repair" or (oc == "spare" and r["target"].strip()):
                 target = resolve_item(r["target"])
-                if not target:
+                if target and target["status"] != "active":
+                    errors.append(f"'{r['name'] or 'part'}': {target['ref']} {target['name']} isn't in the collection any more.")
+                    target = None
+                elif not target:
                     errors.append(f"'{r['name'] or 'part'}': couldn't find the item '{r['target']}'.")
-                elif target["id"] == item_id or (existing and (target["id"] == existing or
-                                                               target["id"] in item_descendant_ids(existing))):
+                elif target and (target["id"] == item_id or (existing and (target["id"] == existing or
+                                                               target["id"] in item_descendant_ids(existing)))):
                     errors.append(f"'{r['name']}': can't fit a part into the donor or into itself.")
             if oc == "spare" and r["location"]:
                 existing_location_id(r["location"], errors,
@@ -1173,7 +1191,10 @@ def part_add(item_id):
     target = None
     if oc == "repair" or (oc == "spare" and r["target"].strip()):
         target = resolve_item(r["target"])
-        if not target:
+        if target and target["status"] != "active":
+            errors.append(f"{target['ref']} {target['name']} isn't in the collection any more.")
+            target = None
+        elif not target:
             errors.append(f"Couldn't find the item '{r['target']}'.")
         elif target["id"] == item_id or (existing and (target["id"] == existing or
                                                        target["id"] in item_descendant_ids(existing))):
@@ -1191,6 +1212,71 @@ def part_add(item_id):
     ref = q("SELECT ref FROM items WHERE id = ?", (part_id,), one=True)["ref"]
     flash(f"Recorded {r['name']} ({ref})", "ok")
     return back
+
+
+@app.route("/parts/<int:part_id>/edit", methods=["POST"])
+def part_edit(part_id):
+    """Correct a 'parts taken off' row: the date, the amount and who it went to."""
+    part = get_item(part_id)
+    if not part["harvested_from_id"]:
+        abort(404)
+    oc, _, _, _ = part_flow(part)
+    f = request.form
+    date = parse_date(f.get("date")) or part["taken_off_date"] or today()
+    amount = parse_money(f.get("value"))
+    ex("UPDATE items SET taken_off_date = ?, updated_at = ? WHERE id = ?", (date, now(), part_id))
+    if part["salvage_value"] is not None or (oc == "spare" and amount is not None):
+        # the cost moved onto the part; its own purchase price follows unless that cost has since moved on
+        follows = part["purchase_price"] is None and part["salvage_value"] is None or \
+            (part["purchase_price"] is not None and part["purchase_price"] == part["salvage_value"])
+        ex("UPDATE items SET salvage_value = ? WHERE id = ?", (amount, part_id))
+        if follows:
+            ex("UPDATE items SET purchase_price = ? WHERE id = ?", (amount, part_id))
+    elif oc == "repair":
+        t = part_transfers(part_id)[-1]
+        ex("UPDATE work_log SET date = ?, cost = ? WHERE id = ?", (date, amount, t["id"]))
+        refresh_value(t["item_id"])
+    elif oc == "sold":
+        ex("UPDATE items SET disposal_price = ? WHERE id = ?", (amount or 0.0, part_id))
+    if oc in ("sold", "given_away", "scrapped"):
+        ex("UPDATE items SET disposal_date = ?, disposal_destination = ? WHERE id = ?",
+           (date, clean(f.get("dest")), part_id))
+    commit()
+    flash(f"Updated {part['name']}", "ok")
+    return redirect(url_for("item_view", item_id=part["harvested_from_id"]) + "#parts")
+
+
+@app.route("/parts/<int:part_id>/remove", methods=["POST"])
+def part_remove(part_id):
+    """Undo taking a part off: delete it if taking it off created it, otherwise put it back inside."""
+    part = get_item(part_id)
+    donor_id = part["harvested_from_id"]
+    if not donor_id:
+        abort(404)
+    for t in part_transfers(part_id):
+        ex("DELETE FROM work_log WHERE id = ?", (t["id"],))
+        refresh_value(t["item_id"])
+    if part["taken_off_new"]:
+        loc = effective_location_id(part)
+        ex("UPDATE items SET parent_id = ?, location_id = CASE WHEN ? IS NULL THEN ? ELSE NULL END WHERE parent_id = ?",
+           (part["parent_id"], part["parent_id"], loc, part_id))
+        ex("UPDATE items SET harvested_from_id = NULL WHERE harvested_from_id = ?", (part_id,))
+        for ph in q("SELECT filename FROM photos WHERE item_id = ?", (part_id,)):
+            remove_photo_files(ph["filename"])
+        ex("DELETE FROM items WHERE id = ?", (part_id,))
+        msg = f"Removed {part['name']} ({part['ref']}) and deleted it"
+    else:
+        moved_cost = part["salvage_value"] is not None and part["purchase_price"] == part["salvage_value"]
+        ex("""UPDATE items SET status = 'active', parent_id = ?, location_id = NULL, harvested_from_id = NULL,
+              salvage_value = NULL, taken_off_date = NULL, disposal_date = NULL, disposal_price = NULL,
+              disposal_destination = NULL, former_location_id = NULL, former_parent_id = NULL,
+              purchase_price = CASE WHEN ? THEN NULL ELSE purchase_price END, updated_at = ? WHERE id = ?""",
+           (donor_id, 1 if moved_cost else 0, now(), part_id))
+        msg = f"Put {part['name']} ({part['ref']}) back inside"
+    ex("UPDATE items SET updated_at = ? WHERE id = ?", (now(), donor_id))
+    commit()
+    flash(msg, "ok")
+    return redirect(url_for("item_view", item_id=donor_id) + "#parts")
 
 
 # --- photos -----------------------------------------------------------------
@@ -1394,7 +1480,8 @@ def lookup():
 @app.route("/api/items")
 def api_items():
     text = request.args.get("q", "")
-    rows = search_items(text, request.args.get("status", "all"), limit=25) if text.strip() else []
+    status = "active" if request.args.get("pick") else request.args.get("status", "all")
+    rows = search_items(text, status, limit=25) if text.strip() else []
     return jsonify([{"id": r["id"], "ref": r["ref"], "name": r["name"], "label": item_label(r),
                      "status": r["status"]} for r in rows])
 

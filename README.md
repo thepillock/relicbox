@@ -7,7 +7,7 @@ Python/Flask + SQLite, one container, no external services. Everything (database
 ## Features
 
 - **Nested locations** with descriptions (House › Loft › Shelf 3 › Box A).
-- **Nested items**: a chip inside a card inside a computer inside a box. An item inside another item takes its location automatically.
+- **Nested items**: a chip inside a card inside a computer inside a box. An item inside another item takes its location automatically, and lists show every container ("In Zorro card, Amiga 3000 – House › Office"). Only items still in the collection can be chosen as a container.
 - **Reference numbers**: auto-generated with a configurable prefix (`RC-00001`) or typed by hand. Each item can also store a manufacturer barcode.
 - **Barcode labels**: Code 128 labels for single items or a whole search result (62×29, 50×25, 89×36 mm or A4 3×8).
 - **Scanning**: the Scan page uses the phone camera to read item labels or manufacturer barcodes and jumps to the item. Unknown codes offer "create item with this barcode".
@@ -24,7 +24,7 @@ Python/Flask + SQLite, one container, no external services. Everything (database
   - *Sold / charged to someone*: records the price and who to.
   - *Given away / scrapped*.
   
-  Parts already recorded inside the donor can be processed the same way. Later parts are added straight into the **Parts taken off** table on the donor's page. A spare on the shelf has **Fit into another item** and **Sold / given away** buttons, and its income still goes to the donor even after the donor is finished. When nothing more will come off the donor, use **Finished: dispose of shell** (selling the shell adds to its income).
+  Parts already recorded inside the donor can be processed the same way. Later parts are added straight into the **Parts taken off** table on the donor's page. Each row can be edited (date, amount, who it went to). **Remove** deletes a part that taking it off created; a part that was already recorded is **Put back** inside instead. A spare on the shelf has **Fit into another item** and **Sold / given away** buttons, and its income still goes to the donor even after the donor is finished. When nothing more will come off the donor, use **Finished: dispose of shell** (selling the shell adds to its income).
 - **Search**: keywords across name, ref, barcode, descriptors, notes, seller etc. Use `descriptor:value` to filter on one descriptor, e.g. `manufacturer:commodore model:a1200`.
 - **Reports**:
   - Collection: item count, spend and valuations, per location (sub-locations included) and by any descriptor.

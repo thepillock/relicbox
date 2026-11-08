@@ -144,3 +144,51 @@ assert "Harvested from item" not in c.get(f"/items/{stand['id']}/edit").data.dec
 post(f"/items/{stand['id']}/edit", {"name": "Tilt/swivel stand", "status": "sold", "disposal_price": "22"})
 assert row(stand["id"])["harvested_from_id"] == mon_b               # link kept after editing
 print("ALL OK (parts)")
+
+# 9. picker and containers: sold / broken items can't be chosen
+gone_box = new_item(name="Sold Big Box", location_id=shelf)
+post(f"/items/{gone_box}/dispose", {"kind": "sold", "price": "5"})
+assert not [x for x in c.get("/api/items?pick=1&q=Big+Box").json if x["id"] == gone_box]
+assert [x for x in c.get("/api/items?q=Big+Box").json if x["id"] == gone_box]     # normal search still finds it
+loose = new_item(name="Loose card", location_id=shelf)
+r = post(f"/items/{loose}/edit", {"name": "Loose card", "parent": row(gone_box)["ref"]})
+assert b"Choose an item that" in r.data and row(loose)["parent_id"] is None
+r = post("/items/new", {"name": "Into a donor", "parent": row(mon_b)["ref"]})
+assert b"Choose an item that" in r.data
+
+# 10. listings show every container: "In <item>, <parent> – <location>"
+outer = new_item(name="Outer machine", location_id=box)
+mid = new_item(name="Middle card", parent=row(outer)["ref"])
+inner = new_item(name="Inner chip", parent=row(mid)["ref"])
+html = c.get("/items?q=Inner+chip").data.decode()
+assert re.search(r"In</span> <a[^>]*>Middle card</a>, <a[^>]*>Outer machine</a> <span class=\"muted\">–</span> <a[^>]*>Box</a>", html), html[html.find("Inner chip"):][:600]
+
+# 11. parts taken off can be edited and removed
+d3 = new_item(name="Donor 3", location_id=shelf, purchase_price="100")
+kept = new_item(name="Recorded RAM", parent=row(d3)["ref"])          # already recorded inside
+post(f"/items/{d3}/breakdown", {"date": "2026-11-01", "mark_broken": "1"})
+post(f"/items/{d3}/parts", {"date": "2026-11-02", "part": "Keyboard", "outcome": "spare", "value": "20"})
+post(f"/items/{d3}/parts", {"date": "2026-11-02", "part": "Drive", "outcome": "sold", "value": "30", "dest": "Al"})
+post(f"/items/{d3}/parts", {"date": "2026-11-02", "part": "Fan", "outcome": "repair", "value": "5", "target": row(item)["ref"]})
+post(f"/items/{d3}/parts", {"date": "2026-11-02", "part": f"{row(kept)['ref']} — Recorded RAM", "outcome": "spare", "value": "12"})
+con = sqlite3.connect(DB); con.row_factory = sqlite3.Row
+ids = {r["name"]: r["id"] for r in con.execute("SELECT id, name FROM items WHERE harvested_from_id = ?", (d3,))}; con.close()
+assert spend(d3) == 100 - 20 - 5 - 12
+post(f"/parts/{ids['Keyboard']}/edit", {"date": "2026-10-30", "value": "25"})
+k = row(ids["Keyboard"]); assert k["taken_off_date"] == "2026-10-30" and k["salvage_value"] == 25 and k["purchase_price"] == 25
+post(f"/parts/{ids['Drive']}/edit", {"date": "2026-10-31", "value": "35", "dest": "Bob"})
+d = row(ids["Drive"]); assert (d["disposal_price"], d["disposal_date"], d["disposal_destination"]) == (35, "2026-10-31", "Bob")
+before_item_work = row(item)["work_cost"]
+post(f"/parts/{ids['Fan']}/edit", {"date": "2026-10-29", "value": "7"})
+assert row(item)["work_cost"] == before_item_work + 2
+assert spend(d3) == 100 - 25 - 7 - 12
+# remove: a part created by taking it off is deleted, and its work-log entry goes too
+post(f"/parts/{ids['Fan']}/remove")
+assert row(ids["Fan"]) is None and row(item)["work_cost"] == before_item_work - 5
+# remove: a part that was already recorded goes back inside, with its moved cost undone
+post(f"/parts/{ids['Recorded RAM']}/remove")
+k = row(kept); assert k["parent_id"] == d3 and k["harvested_from_id"] is None and k["purchase_price"] is None
+assert spend(d3) == 100 - 25
+html = c.get(f"/items/{d3}").data.decode()
+assert "Put back" not in html and "Remove" in html and "qr-preview" not in html and "item-layout" in html
+print("ALL OK (edit parts, pickers, chain)")

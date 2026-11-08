@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS ix_work_log_item ON work_log(item_id, date);
 """
 
 DEFAULT_SETTINGS = {
-    "schema_version": "6",
+    "schema_version": "7",
     "label_format": "qr",
     "public_url": "",
     "ref_prefix": "RC-",
@@ -166,7 +166,19 @@ def migrate(conn):
     if "moved_out" not in _columns(conn, "items"):
         conn.execute("ALTER TABLE items ADD COLUMN moved_out REAL NOT NULL DEFAULT 0")
     refresh_moved_out(conn)
-    conn.execute("UPDATE settings SET value = '6' WHERE key = 'schema_version'")
+    # v7: the date a part came off (editable), and whether taking it off created it (so removing the
+    # entry deletes it) or it was already recorded inside (so removing puts it back).
+    cols = _columns(conn, "items")
+    if "taken_off_date" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN taken_off_date TEXT")
+        conn.execute("""UPDATE items SET taken_off_date = COALESCE(
+                            CASE WHEN status IN ('sold', 'given_away', 'scrapped') THEN disposal_date END,
+                            (SELECT MIN(w.date) FROM work_log w WHERE w.part_id = items.id),
+                            substr(created_at, 1, 10))
+                        WHERE harvested_from_id IS NOT NULL""")
+    if "taken_off_new" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN taken_off_new INTEGER NOT NULL DEFAULT 0")
+    conn.execute("UPDATE settings SET value = '7' WHERE key = 'schema_version'")
 
 
 def refresh_moved_out(conn):

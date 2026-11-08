@@ -321,3 +321,41 @@ button.toggle[aria-expanded=true] .caret { transform: rotate(90deg); }
 .part-row[data-outcome=spare] .lbl-value { display: none; }
 .part-row[data-outcome=spare] .f-repair { display: flex !important; }
 tr[data-outcome=spare] .d-target { display: block; }
+
+/* item page layout: three columns, two rows, then the tables */
+.item-layout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem; margin-bottom: .5rem;
+  grid-template-areas: "details notes photo" "purchase money thumbs"; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .8rem 1rem; min-width: 0; }
+.panel h3 { margin: 0 0 .5rem; }
+.panel .facts { gap: .25rem .9rem; }
+.panel .desc { margin: 0 0 .7rem; }
+.panel table.totals { margin: 0; width: 100%; min-width: 0; }
+.panel .hint { margin-top: .6rem; }
+.panel .valline { margin: .7rem 0 0; }
+.p-details { grid-area: details; } .p-notes { grid-area: notes; } .p-photo { grid-area: photo; }
+.p-purchase { grid-area: purchase; } .p-money { grid-area: money; } .p-thumbs { grid-area: thumbs; }
+.notes-text { white-space: pre-line; max-height: 18rem; overflow: auto; }
+.p-photo { padding: .5rem; display: flex; }
+.main-photo { display: block; width: 100%; }
+.main-photo img { display: block; width: 100%; height: 100%; max-height: 22rem; min-height: 12rem; object-fit: contain;
+  border-radius: 8px; background: var(--bg); }
+.no-photo { flex: 1; min-height: 12rem; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .6rem; color: var(--muted); border: 2px dashed var(--line); border-radius: 8px; }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: .5rem; }
+.thumbs figure { margin: 0; }
+.thumb-btn { padding: 0; border: 2px solid transparent; border-radius: 7px; overflow: hidden; display: block; width: 100%; background: none; }
+.thumb-btn img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.thumbs figure.current .thumb-btn { border-color: var(--accent); }
+.thumbs figcaption { display: flex; justify-content: space-between; font-size: .75rem; padding: .15rem 0; }
+.p-thumbs .upload { margin: .6rem 0 0; }
+@media (max-width: 900px) {
+  .item-layout { grid-template-columns: 1fr 1fr; grid-template-areas: "photo photo" "thumbs thumbs" "details notes" "purchase money"; }
+}
+@media (max-width: 640px) {
+  .item-layout { grid-template-columns: 1fr; grid-template-areas: "photo" "thumbs" "details" "money" "purchase" "notes"; }
+}
+
+/* "Sure?" confirmation on dangerous buttons */
+button.armed, .btn.armed, button.link.armed { background: var(--bad) !important; color: #fff !important;
+  border-color: var(--bad) !important; padding: .15rem .55rem; border-radius: 6px; }
+.ledger .mt { margin-top: .3rem; }

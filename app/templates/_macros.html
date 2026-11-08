@@ -10,7 +10,7 @@
 {%- endmacro %}
 
 {% macro where(r) -%}
-  {% if r.container %}<span class="muted">in</span> <a href="{{ url_for('item_view', item_id=r.container.id) }}">{{ r.container.name }}</a>{% if r.loc_path %} <span class="muted">·</span> {% endif %}{% endif %}
+  {%- if r.containers %}<span class="muted">In</span> {% for c in r.containers %}<a href="{{ url_for('item_view', item_id=c.id) }}">{{ c.name }}</a>{{ ', ' if not loop.last }}{% endfor %}{% if r.loc_path %} <span class="muted">–</span> {% endif %}{% endif %}
   {%- for l in r.loc_path %}{{ ' › ' if not loop.first }}<a href="{{ url_for('location_view', loc_id=l.id) }}">{{ l.name }}</a>{% endfor %}
 {%- endmacro %}
 

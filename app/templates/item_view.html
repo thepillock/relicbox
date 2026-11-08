@@ -30,16 +30,38 @@
   </div>
 </div>
 
-<div class="itemgrid">
-  <div class="col">
+<div class="item-layout">
+  <section class="panel p-details">
     {% if item.description %}<p class="desc">{{ item.description }}</p>{% endif %}
-
     <dl class="facts">
       {% for d in descriptors %}<dt>{{ d.name }}</dt><dd>{{ d.value }}</dd>{% endfor %}
       {% if item.barcode %}<dt>Product barcode</dt><dd class="mono">{{ item.barcode }}</dd>{% endif %}
       {% if donor %}<dt>Harvested from</dt><dd><a href="{{ url_for('item_view', item_id=donor.id) }}">{{ donor.ref }} — {{ donor.name }}</a></dd>{% endif %}
     </dl>
+    {% if not item.description and not descriptors and not item.barcode and not donor %}<p class="muted small">No details yet · <a href="{{ url_for('item_edit', item_id=item.id) }}">Edit</a></p>{% endif %}
+  </section>
 
+  <section class="panel p-notes">
+    <h3>Notes</h3>
+    {% if item.notes %}<div class="notes-text">{{ item.notes }}</div>
+    {% else %}<p class="muted small">No notes · <a href="{{ url_for('item_edit', item_id=item.id) }}">Add some</a></p>{% endif %}
+  </section>
+
+  <section class="panel p-photo" id="photos">
+    {% if photos %}
+    <a class="main-photo" href="{{ url_for('media_photo', filename=photos[0].filename) }}" target="_blank" id="main-photo-link">
+      <img src="{{ url_for('media_photo', filename=photos[0].filename) }}" alt="{{ item.name }}" id="main-photo"></a>
+    {% else %}
+    <div class="no-photo">
+      <span>No photos yet</span>
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('photo_upload', item_id=item.id) }}">
+        <label class="btn small">Add photos<input type="file" name="photos" accept="image/*" multiple hidden data-autosubmit></label>
+      </form>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel p-purchase">
     <h3>Purchase</h3>
     <dl class="facts">
       <dt>Date</dt><dd>{{ item.purchase_date or '—' }}</dd>
@@ -47,7 +69,9 @@
       <dt>Seller</dt><dd>{{ item.purchase_seller or '—' }}</dd>
       <dt>Platform</dt><dd>{{ item.purchase_platform or '—' }}</dd>
     </dl>
+  </section>
 
+  <section class="panel p-money">
     <h3>Spend</h3>
     {% set parts_income = part_totals.sold %}
     <table class="totals">
@@ -90,32 +114,27 @@
     </dl>
     {% endif %}
 
-    {% if item.notes %}<h3>Notes</h3><div class="notes">{{ item.notes }}</div>{% endif %}
-  </div>
+  </section>
 
-  <div class="col" id="photos">
+  <section class="panel p-thumbs">
     {% if photos %}
-    <div class="gallery">
+    <div class="thumbs">
       {% for p in photos %}
-      <figure>
-        <a href="{{ url_for('media_photo', filename=p.filename) }}" target="_blank"><img loading="lazy" src="{{ url_for('media_thumb', filename=p.filename) }}" alt=""></a>
+      <figure class="{{ 'current' if loop.first }}">
+        <button type="button" class="thumb-btn" data-full="{{ url_for('media_photo', filename=p.filename) }}" title="Show this photo">
+          <img loading="lazy" src="{{ url_for('media_thumb', filename=p.filename) }}" alt=""></button>
         <figcaption>
-          {% if not loop.first %}<form method="post" action="{{ url_for('photo_primary', photo_id=p.id) }}" class="inline"><button class="link">Make main</button></form>{% else %}<span class="muted">Main</span>{% endif %}
-          <form method="post" action="{{ url_for('photo_delete', photo_id=p.id) }}" class="inline" data-confirm="Delete this photo?"><button class="link danger">Delete</button></form>
+          {% if not loop.first %}<form method="post" action="{{ url_for('photo_primary', photo_id=p.id) }}" class="inline"><button class="link">Main</button></form>{% else %}<span class="muted">Main</span>{% endif %}
+          <form method="post" action="{{ url_for('photo_delete', photo_id=p.id) }}" class="inline" data-confirm="Delete this photo"><button class="link danger">Delete</button></form>
         </figcaption>
       </figure>
       {% endfor %}
     </div>
-    {% endif %}
     <form method="post" enctype="multipart/form-data" action="{{ url_for('photo_upload', item_id=item.id) }}" class="upload">
-      <label class="btn">Add photos<input type="file" name="photos" accept="image/*" multiple hidden data-autosubmit></label>
+      <label class="btn small">Add photos<input type="file" name="photos" accept="image/*" multiple hidden data-autosubmit></label>
     </form>
-    {% if label_format == 'code128' %}
-    <img class="barcode-preview" src="{{ url_for('barcode_svg', text=item.ref) }}" alt="Barcode for {{ item.ref }}">
-    {% else %}
-    <img class="qr-preview" src="{{ url_for('qr_svg', d=item_qr_url(item.ref)) }}" alt="QR code for {{ item.ref }}">
-    {% endif %}
-  </div>
+    {% else %}<p class="muted small">Photo thumbnails appear here.</p>{% endif %}
+  </section>
 </div>
 
 {% set is_donor = item.broken_date %}
@@ -158,6 +177,92 @@
       </tr>
       {% endfor %}
     </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+
+<section id="contents">
+  <div class="pagehead">
+    <h2>Contents <small class="muted">{{ contents|length }}</small></h2>
+    <div class="actions">
+      <a class="btn small" href="{{ url_for('item_new', parent_id=item.id) }}">+ Add part inside</a>
+    </div>
+  </div>
+  {{ item_cards(contents, show_where=False) }}
+</section>
+
+{% set can_part = item.status in ('active', 'broken') %}
+{% if is_donor or parts or item.status == 'active' %}
+<section id="parts" class="ledger-section">
+  <div class="ledger-head">
+    <h2>Parts taken off{% if parts %} <small class="muted">{{ parts|length }}{% if item.moved_out %} · {{ item.moved_out|money }} moved{% endif %}{% if part_totals.sold %} · {{ part_totals.sold|money }} sold{% endif %}{{ ' · finished' if part_totals.finished }}</small>{% endif %}</h2>
+    {% if can_part %}<button type="button" class="btn small" data-add>+ {{ 'Add part' if item.broken_date else 'Take a part off' }}</button>{% endif %}
+  </div>
+  <form id="part-new" method="post" action="{{ url_for('part_add', item_id=item.id) }}"></form>
+  {% for r in parts %}
+  <form id="part-edit-{{ r.part.id }}" method="post" action="{{ url_for('part_edit', part_id=r.part.id) }}"></form>
+  <form id="part-rm-{{ r.part.id }}" method="post" action="{{ url_for('part_remove', part_id=r.part.id) }}"
+        data-confirm="{{ 'Remove and delete ' ~ r.part.ref if r.part.taken_off_new else 'Put ' ~ r.part.name ~ ' back inside' }}"></form>
+  {% endfor %}
+  <datalist id="inside-donor">{% for c in inside_donor %}<option value="{{ c.ref }} — {{ c.name }}">{% endfor %}</datalist>
+  <div class="tablewrap" {{ 'hidden' if not parts }}>
+  <table class="data ledger parts">
+    <thead><tr><th class="c-date">Date</th><th>Part</th><th>What happened</th><th class="num c-amt">Cost moved</th><th class="num c-amt">Sold for</th><th class="c-act"></th></tr></thead>
+    <tbody>
+      {% for r in parts %}
+      <tr class="view-row">
+        <td class="nowrap">{{ r.date or r.part.created_at[:10] }}</td>
+        <td><a href="{{ url_for('item_view', item_id=r.part.id) }}"><code class="ref">{{ r.part.ref }}</code> {{ r.part.name }}</a></td>
+        <td><span class="oc oc-{{ r.outcome }}">{{ OUTCOME_LABELS[r.outcome] }}</span>
+          {% if r.target %} → <a href="{{ url_for('item_view', item_id=r.target.id) }}">{{ r.target.ref }} {{ r.target.name }}</a>{% endif %}
+          {% if r.outcome in ('sold', 'given_away') and r.part.disposal_destination %} → {{ r.part.disposal_destination }}{% endif %}</td>
+        <td class="num">{{ r.moved|money if r.moved else '' }}</td>
+        <td class="num">{{ r.income|money if r.income or (r.outcome == 'sold' and r.part.salvage_value is none) else '' }}</td>
+        <td class="row-actions">{% if r.outcome == 'spare' and r.part.status == 'active' %}<a class="link small" href="{{ url_for('item_fit', item_id=r.part.id) }}">Fit</a> {% endif %}<button type="button" class="link" data-edit>Edit</button></td>
+      </tr>
+      {% set has_amount = r.part.salvage_value is not none or r.outcome in ('spare', 'repair', 'sold') %}
+      <tr class="edit-row" hidden>
+        <td><input form="part-edit-{{ r.part.id }}" type="date" name="date" value="{{ r.date or '' }}" aria-label="Date"></td>
+        <td><code class="ref">{{ r.part.ref }}</code> {{ r.part.name }}</td>
+        <td><span class="oc oc-{{ r.outcome }}">{{ OUTCOME_LABELS[r.outcome] }}</span>
+          {% if r.outcome in ('sold', 'given_away') %}<input form="part-edit-{{ r.part.id }}" name="dest" value="{{ r.part.disposal_destination or '' }}" placeholder="To whom" aria-label="To whom" class="mt">{% endif %}</td>
+        <td colspan="2">{% if has_amount %}
+          {% set amt = r.part.salvage_value if r.part.salvage_value is not none else (r.transfer.cost if r.transfer else (r.part.disposal_price if r.outcome == 'sold' else none)) %}
+          <input form="part-edit-{{ r.part.id }}" name="value" inputmode="decimal" value="{{ amt|num if amt is not none else '' }}"
+                 placeholder="{{ currency }} {{ 'value' if r.outcome == 'spare' or r.part.salvage_value is not none else 'price' }}" aria-label="Amount">{% endif %}</td>
+        <td class="row-actions"><button form="part-edit-{{ r.part.id }}" class="btn small primary">Save</button>
+          <button type="button" class="link" data-cancel>Cancel</button>
+          <button form="part-rm-{{ r.part.id }}" class="link danger" title="{{ 'Deletes this part' if r.part.taken_off_new else 'Puts it back inside ' ~ item.name }}">{{ 'Remove' if r.part.taken_off_new else 'Put back' }}</button></td>
+      </tr>
+      {% endfor %}
+      <tr class="new-row" hidden data-outcome="spare">
+        <td><input form="part-new" type="date" name="date" value="{{ today }}" required aria-label="Date"></td>
+        <td><input form="part-new" name="part" list="inside-donor" required autocomplete="off" aria-label="Part"
+                   placeholder="{{ 'New part, or one recorded inside' if inside_donor else 'Part name, e.g. PSU' }}"></td>
+        <td class="what"><div class="what-stack">
+          <select form="part-new" name="outcome" class="outcome" aria-label="What happened">
+            {% for k, v in PART_OUTCOMES.items() if k != 'leave' %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select>
+          <select form="part-new" name="location" class="d-loc" aria-label="Store it in">
+            <option value="">Store with the donor</option>
+            {% for loc, depth in locations %}<option value="{{ loc.id }}">{{ '  ' * depth }}{{ loc.name }}</option>{% endfor %}
+          </select>
+          <input form="part-new" name="target" class="d-target item-picker" list="item-options" autocomplete="off" placeholder="Fitted into (ref or name)" aria-label="Other item">
+          <input form="part-new" name="dest" class="d-dest" placeholder="To whom" aria-label="To whom">
+        </div></td>
+        <td colspan="2"><input form="part-new" name="value" class="d-amount" inputmode="decimal" aria-label="Amount" placeholder="{{ currency }}"></td>
+        <td class="row-actions"><button form="part-new" class="btn small primary">Save</button> <button type="button" class="link" data-cancel>Cancel</button></td>
+      </tr>
+    </tbody>
+    {% if parts %}
+    <tfoot>
+      {% if part_totals.moved_spare %}<tr><td colspan="3">Kept as their own items ({{ part_totals.n_spare|int }})</td><td class="num">{{ part_totals.moved_spare|money }}</td><td></td><td></td></tr>{% endif %}
+      {% if part_totals.moved_repair %}<tr><td colspan="3">Added to other items' work logs ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.moved_repair|money }}</td><td></td><td></td></tr>{% endif %}
+      {% if part_totals.sold %}<tr><td colspan="3">Sold ({{ part_totals.n_sold|int }})</td><td></td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>{% endif %}
+      <tr class="net-row"><td colspan="3">Total</td><td class="num">{{ part_totals.moved|money }}</td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>
+    </tfoot>
+    {% endif %}
   </table>
   </div>
 </section>
@@ -210,73 +315,6 @@
   {% if valuations %}<p class="hint">What it's worth (e.g. for insurance). Valuations don't affect spend or profit.</p>{% endif %}
 </section>
 {% endif %}
-
-{% set can_part = item.status in ('active', 'broken') %}
-{% if is_donor or parts or item.status == 'active' %}
-<section id="parts" class="ledger-section">
-  <div class="ledger-head">
-    <h2>Parts taken off{% if parts %} <small class="muted">{{ parts|length }}{% if item.moved_out %} · {{ item.moved_out|money }} moved{% endif %}{% if part_totals.sold %} · {{ part_totals.sold|money }} sold{% endif %}{{ ' · finished' if part_totals.finished }}</small>{% endif %}</h2>
-    {% if can_part %}<button type="button" class="btn small" data-add>+ {{ 'Add part' if item.broken_date else 'Take a part off' }}</button>{% endif %}
-  </div>
-  <form id="part-new" method="post" action="{{ url_for('part_add', item_id=item.id) }}"></form>
-  <datalist id="inside-donor">{% for c in inside_donor %}<option value="{{ c.ref }} — {{ c.name }}">{% endfor %}</datalist>
-  <div class="tablewrap" {{ 'hidden' if not parts }}>
-  <table class="data ledger parts">
-    <thead><tr><th class="c-date">Date</th><th>Part</th><th>What happened</th><th class="num c-amt">Cost moved</th><th class="num c-amt">Sold for</th><th class="c-act"></th></tr></thead>
-    <tbody>
-      {% for r in parts %}
-      <tr class="view-row">
-        <td class="nowrap">{{ r.date or r.part.created_at[:10] }}</td>
-        <td><a href="{{ url_for('item_view', item_id=r.part.id) }}"><code class="ref">{{ r.part.ref }}</code> {{ r.part.name }}</a></td>
-        <td><span class="oc oc-{{ r.outcome }}">{{ OUTCOME_LABELS[r.outcome] }}</span>
-          {% if r.target %} → <a href="{{ url_for('item_view', item_id=r.target.id) }}">{{ r.target.ref }} {{ r.target.name }}</a>{% endif %}
-          {% if r.outcome in ('sold', 'given_away') and r.part.disposal_destination %} → {{ r.part.disposal_destination }}{% endif %}</td>
-        <td class="num">{{ r.moved|money if r.moved else '' }}</td>
-        <td class="num">{{ r.income|money if r.income or (r.outcome == 'sold' and r.part.salvage_value is none) else '' }}</td>
-        <td class="row-actions">{% if r.outcome == 'spare' %}<a class="link small" href="{{ url_for('item_fit', item_id=r.part.id) }}">Fit</a>{% endif %}</td>
-      </tr>
-      {% endfor %}
-      <tr class="new-row" hidden data-outcome="spare">
-        <td><input form="part-new" type="date" name="date" value="{{ today }}" required aria-label="Date"></td>
-        <td><input form="part-new" name="part" list="inside-donor" required autocomplete="off" aria-label="Part"
-                   placeholder="{{ 'New part, or one recorded inside' if inside_donor else 'Part name, e.g. PSU' }}"></td>
-        <td class="what"><div class="what-stack">
-          <select form="part-new" name="outcome" class="outcome" aria-label="What happened">
-            {% for k, v in PART_OUTCOMES.items() if k != 'leave' %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
-          </select>
-          <select form="part-new" name="location" class="d-loc" aria-label="Store it in">
-            <option value="">Store with the donor</option>
-            {% for loc, depth in locations %}<option value="{{ loc.id }}">{{ '  ' * depth }}{{ loc.name }}</option>{% endfor %}
-          </select>
-          <input form="part-new" name="target" class="d-target item-picker" list="item-options" autocomplete="off" placeholder="Fitted into (ref or name)" aria-label="Other item">
-          <input form="part-new" name="dest" class="d-dest" placeholder="To whom" aria-label="To whom">
-        </div></td>
-        <td colspan="2"><input form="part-new" name="value" class="d-amount" inputmode="decimal" aria-label="Amount" placeholder="{{ currency }}"></td>
-        <td class="row-actions"><button form="part-new" class="btn small primary">Save</button> <button type="button" class="link" data-cancel>Cancel</button></td>
-      </tr>
-    </tbody>
-    {% if parts %}
-    <tfoot>
-      {% if part_totals.moved_spare %}<tr><td colspan="3">Kept as their own items ({{ part_totals.n_spare|int }})</td><td class="num">{{ part_totals.moved_spare|money }}</td><td></td><td></td></tr>{% endif %}
-      {% if part_totals.moved_repair %}<tr><td colspan="3">Added to other items' work logs ({{ part_totals.n_repair|int }})</td><td class="num">{{ part_totals.moved_repair|money }}</td><td></td><td></td></tr>{% endif %}
-      {% if part_totals.sold %}<tr><td colspan="3">Sold ({{ part_totals.n_sold|int }})</td><td></td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>{% endif %}
-      <tr class="net-row"><td colspan="3">Total</td><td class="num">{{ part_totals.moved|money }}</td><td class="num">{{ part_totals.sold|money }}</td><td></td></tr>
-    </tfoot>
-    {% endif %}
-  </table>
-  </div>
-</section>
-{% endif %}
-
-<section>
-  <div class="pagehead">
-    <h2>Contents <small class="muted">{{ contents|length }}</small></h2>
-    <div class="actions">
-      <a class="btn small" href="{{ url_for('item_new', parent_id=item.id) }}">+ Add part inside</a>
-    </div>
-  </div>
-  {{ item_cards(contents, show_where=False) }}
-</section>
 
 <section class="danger-zone">
   <a class="btn small" href="{{ url_for('item_new', copy=item.id) }}">Duplicate</a>

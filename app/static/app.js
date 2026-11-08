@@ -1,7 +1,20 @@
-// Confirmation prompts on dangerous forms
+// Dangerous buttons: the first click turns the button red and asks "Sure?", the second does it.
 document.addEventListener('submit', e => {
-  const msg = e.target.dataset && e.target.dataset.confirm;
-  if (msg && !confirm(msg)) e.preventDefault();
+  const form = e.target;
+  if (!form.dataset || !form.dataset.confirm) return;
+  const btn = e.submitter || form.querySelector('button');
+  if (btn && btn.dataset.armed === '1') return;          // second click: go ahead
+  e.preventDefault();
+  if (!btn) return;
+  btn.dataset.armed = '1';
+  btn.dataset.label = btn.textContent;
+  btn.textContent = 'Sure?';
+  btn.classList.add('armed');
+  btn.title = form.dataset.confirm;
+  clearTimeout(btn._disarm);
+  btn._disarm = setTimeout(() => {
+    btn.dataset.armed = ''; btn.textContent = btn.dataset.label; btn.classList.remove('armed');
+  }, 4000);
 });
 
 // Auto-submit photo uploads
@@ -22,7 +35,7 @@ document.querySelectorAll('input[data-autosubmit]').forEach(inp =>
     t = setTimeout(async () => {
       lastQ = qv;
       try {
-        const r = await fetch('/api/items?q=' + encodeURIComponent(qv));
+        const r = await fetch('/api/items?pick=1&q=' + encodeURIComponent(qv));
         const rows = await r.json();
         list.innerHTML = '';
         rows.forEach(row => {
@@ -154,3 +167,13 @@ document.querySelectorAll('input[data-autosubmit]').forEach(inp =>
     if (all) document.querySelectorAll('ul.tree button.toggle').forEach(b => setOpen(b, all.dataset.tree === 'open'));
   });
 })();
+
+// Item page: click a thumbnail to show it in the large photo
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.thumb-btn');
+  if (!btn) return;
+  const img = document.getElementById('main-photo'), link = document.getElementById('main-photo-link');
+  if (!img) return;
+  img.src = btn.dataset.full; link.href = btn.dataset.full;
+  document.querySelectorAll('.thumbs figure').forEach(f => f.classList.toggle('current', f.contains(btn)));
+});
