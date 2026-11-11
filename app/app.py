@@ -1387,6 +1387,16 @@ def qr_svg():
     return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
 
 
+@app.route("/qr.json")
+def qr_json():
+    """QR modules for drawing a label on a canvas (Bluetooth label printers)."""
+    try:
+        m = qr.matrix(request.args.get("d", ""))
+    except ValueError:
+        abort(400)
+    return jsonify(["".join("1" if v else "0" for v in row) for row in m])
+
+
 def base_url():
     return (setting("public_url", "") or request.host_url).rstrip("/")
 

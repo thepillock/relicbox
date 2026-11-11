@@ -20,6 +20,12 @@ RUN mkdir -p /app/static/vendor && \
     python -c "import urllib.request,sys; urllib.request.urlretrieve('https://unpkg.com/@zxing/library@${ZXING_VERSION}/umd/index.min.js', '/app/static/vendor/zxing.min.js')" \
     || (echo '/* zxing unavailable */' > /app/static/vendor/zxing.min.js && echo 'WARNING: could not download ZXing')
 
+# NiimBlueLib (MIT, github.com/MultiMote/niimbluelib): prints to NIIMBOT label printers (e.g. D110)
+# over Web Bluetooth from the label page. Optional, like ZXing above.
+ARG NIIMBLUELIB_VERSION=0.0.1-alpha.38
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://unpkg.com/@mmote/niimbluelib@${NIIMBLUELIB_VERSION}/dist/umd/niimbluelib.min.js', '/app/static/vendor/niimbluelib.min.js')" \
+    || (echo '/* niimbluelib unavailable */' > /app/static/vendor/niimbluelib.min.js && echo 'WARNING: could not download niimbluelib')
+
 # Set by the GitHub Actions build: version (e.g. 1.2.0 or test-abc1234) and channel (stable/test).
 ARG APP_VERSION=dev
 ARG APP_CHANNEL=dev

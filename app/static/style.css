@@ -389,3 +389,10 @@ button.armed, .btn.armed, button.link.armed { background: var(--bad) !important;
 
 .scan-photo { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; margin: 0 0 1rem; }
 .scan-dialog .actions { margin-top: .6rem; }
+
+/* Bluetooth label printer panel */
+.niimbot { margin-bottom: 1.4rem; }
+.niimbot-controls { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.nb-previews { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
+.nb-label { width: 264px; height: auto; image-rendering: pixelated; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+@media (max-width: 640px) { .nb-label { width: calc(50% - .3rem); } }

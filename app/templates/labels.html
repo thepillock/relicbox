@@ -15,6 +15,32 @@
     <a class="btn" href="{{ back }}">Back</a>
   </div>
 </div>
+<section class="panel noprint niimbot" id="niimbot">
+  <div class="ledger-head" style="margin-top:0">
+    <h2>Bluetooth label printer <small class="muted">NIIMBOT D110 and similar</small></h2>
+  </div>
+  <div class="niimbot-controls">
+    <label class="inline-label">Label
+      <select id="nb-size">
+        <option value="22x12">22 × 12 mm</option>
+        <option value="30x12">30 × 12 mm</option>
+        <option value="40x12">40 × 12 mm</option>
+        <option value="30x15">30 × 15 mm</option>
+      </select></label>
+    <label class="inline-label">Darkness <select id="nb-density"></select></label>
+    <button type="button" class="btn" id="nb-connect">Connect printer</button>
+    <button type="button" class="btn primary" id="nb-print" disabled>Print {{ items|length }} label{{ '' if items|length == 1 else 's' }}</button>
+  </div>
+  <p class="hint" id="nb-status"></p>
+  <div class="nb-previews">
+    {% for it in items %}
+    <canvas class="nb-label" data-ref="{{ it.ref }}" data-name="{{ it.name }}" data-qr="{{ item_qr_url(it.ref) }}"
+            title="{{ it.ref }} {{ it.name }}"></canvas>
+    {% endfor %}
+  </div>
+</section>
+
+<h2 class="noprint">Paper labels</h2>
 <div class="labels size-62x29" id="labels">
   {% for it in items %}
   {% set extra = it.descriptors[:2] | map(attribute='value') | join(' · ') %}
@@ -44,5 +70,62 @@ const sel = document.getElementById('label-size'), box = document.getElementById
 const saved = localStorage.getItem('labelSize'); if (saved) sel.value = saved;
 function apply() { box.className = 'labels size-' + sel.value; try { localStorage.setItem('labelSize', sel.value); } catch (e) {} }
 sel.addEventListener('change', apply); apply();
+</script>
+<script src="{{ url_for('static', filename='vendor/niimbluelib.min.js') }}" onerror="void 0"></script>
+<script src="{{ url_for('static', filename='niimbot.js') }}"></script>
+<script>
+(function () {
+  const sizeSel = document.getElementById('nb-size'), dens = document.getElementById('nb-density');
+  const status = document.getElementById('nb-status'), btnC = document.getElementById('nb-connect'), btnP = document.getElementById('nb-print');
+  const canvases = [...document.querySelectorAll('canvas.nb-label')];
+  const qrCache = {};
+  const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  const saved = localStorage.getItem('nbSize'); if (saved) sizeSel.value = saved;
+  function setDensity(min, max, def) {
+    const keep = localStorage.getItem('nbDensity');
+    dens.innerHTML = '';
+    for (let i = min; i <= max; i++) dens.add(new Option(i + (i === def ? ' (normal)' : ''), i));
+    dens.value = keep && +keep >= min && +keep <= max ? keep : def;
+  }
+  setDensity(1, 3, 2);
+  async function render() {
+    const [w, h] = sizeSel.value.split('x').map(Number);
+    await Promise.all(canvases.map(async c => {
+      const url = c.dataset.qr;
+      if (!qrCache[url]) qrCache[url] = await (await fetch('/qr.json?d=' + encodeURIComponent(url))).json();
+      Niimbot.draw(c, { ref: c.dataset.ref, name: c.dataset.name, qrRows: qrCache[url] }, w, h);
+    }));
+  }
+  sizeSel.addEventListener('change', () => { store('nbSize', sizeSel.value); render(); });
+  dens.addEventListener('change', () => store('nbDensity', dens.value));
+  render();
+  if (!Niimbot.supported()) {
+    btnC.disabled = true;
+    status.textContent = window.isSecureContext && navigator.bluetooth
+      ? 'The printer library isn\'t available in this build.'
+      : 'Bluetooth printing needs Chrome on Android (or Chrome/Edge on a computer) and an https:// address.';
+  }
+  btnC.addEventListener('click', async () => {
+    status.textContent = 'Choose your printer in the list…';
+    try {
+      const p = await Niimbot.connect();
+      setDensity(p.densityMin, p.densityMax, p.densityDefault);
+      status.textContent = 'Connected to ' + p.model + '.';
+      btnC.textContent = 'Connected'; btnC.disabled = true; btnP.disabled = false;
+    } catch (e) { status.textContent = 'Couldn\'t connect: ' + (e.message || e); }
+  });
+  btnP.addEventListener('click', async () => {
+    btnP.disabled = true;
+    try {
+      await render();
+      await Niimbot.print(canvases, +dens.value, (i, n) => { status.textContent = `Printing ${i} of ${n}…`; });
+      status.textContent = `Printed ${canvases.length} label${canvases.length === 1 ? '' : 's'}.`;
+    } catch (e) {
+      status.textContent = 'Printing failed: ' + (e.message || e) + '. Try reconnecting the printer.';
+      btnC.disabled = false; btnC.textContent = 'Reconnect';
+      await Niimbot.disconnect();
+    } finally { btnP.disabled = !btnC.disabled; }
+  });
+})();
 </script>
 {% endblock %}

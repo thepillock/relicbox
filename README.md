@@ -92,6 +92,12 @@ Chrome on Android uses the built-in barcode detector. iPhone Safari and Firefox 
 
 Labels are QR codes by default. They encode `<your address>/a/<ref>`, so any phone camera opens the item directly. Set **Settings → Address used in QR labels** to the address you use on your phone (e.g. your HTTPS reverse-proxy name) *before* printing. You can switch to Code 128 barcodes in Settings.
 
+### Bluetooth label printers (NIIMBOT)
+
+The label page can print straight to a NIIMBOT printer (e.g. D110) over Bluetooth, using [NiimBlueLib](https://github.com/MultiMote/niimbluelib) (MIT), bundled at build time. Pick the label size (22×12, 30×12, 40×12 or 30×15 mm), tap **Connect printer**, choose it in the list, then **Print**. A search result prints as one job. Each label has the QR on the left, with the name and the reference (split as `000-` / `094`) on the right.
+
+This needs Chrome on Android (or Chrome/Edge on a computer) and an `https://` address. iPhone browsers don't support Web Bluetooth.
+
 ## Configuration
 
 | Env var | Default | |
