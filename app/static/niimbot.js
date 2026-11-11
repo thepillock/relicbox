@@ -25,39 +25,48 @@ window.Niimbot = (function () {
   }
 
   // Draw one label. qrRows: array of "0101…" strings. Returns the canvas.
-  function draw(canvas, { ref, name, qrRows }, widthMm, heightMm) {
+  function draw(canvas, { ref, name, qrRows, showName = true }, widthMm, heightMm) {
     const W = Math.round(widthMm * DOTS_PER_MM), H = Math.round(heightMm * DOTS_PER_MM);
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
     const m = Math.max(3, Math.round(H * 0.05));
 
-    // QR: whole pixels per module so every module prints the same size
+    // QR: whole dots per module (at most 3, about 0.375 mm, plenty for a phone), kept clear of the
+    // label's rounded corners by ~0.6 mm on every side
+    const inset = Math.round(DOTS_PER_MM * 0.6);
     const n = qrRows.length;
-    const scale = Math.max(1, Math.floor((H - 4) / n));        // as big as the label height allows
-    const size = n * scale, qy = Math.round((H - size) / 2), qx = Math.max(qy, 3);
+    const scale = Math.max(1, Math.min(3, Math.floor((H - 2 * inset) / n)));
+    const size = n * scale, qy = Math.round((H - size) / 2), qx = Math.max(qy, inset + 2);
     ctx.fillStyle = '#000';
     qrRows.forEach((row, y) => {
       for (let x = 0; x < n; x++) if (row[x] === '1') ctx.fillRect(qx + x * scale, qy + y * scale, scale, scale);
     });
 
-    // Text: name on top, reference large below (split after its last "-", like 000- / 094)
+    // Text: optional name on top, reference large below (split after its last "-", like 000- / 094)
     const tx = qx + size + Math.round(m * 1.5), tw = W - tx - m;
     if (tw > 10) {
       ctx.textBaseline = 'top';
-      const nameH = Math.round(H * 0.2);
-      // shrink the name to fit (down to ~1.5 mm tall), then shorten it if it still doesn't
-      const nameSize = Math.max(Math.round(DOTS_PER_MM * 1.5), fitFont(ctx, name || '', 'system-ui, sans-serif', 600, tw, nameH));
-      ctx.font = `600 ${nameSize}px system-ui, sans-serif`;
-      ctx.fillText(ellipsize(ctx, name || '', tw), tx, m + (nameH - nameSize));
+      let top = m;
+      if (showName && name) {
+        const nameH = Math.round(H * 0.2);
+        // shrink the name to fit (down to ~1.5 mm tall), then shorten it if it still doesn't
+        const nameSize = Math.max(Math.round(DOTS_PER_MM * 1.5), fitFont(ctx, name, 'system-ui, sans-serif', 600, tw, nameH));
+        ctx.font = `600 ${nameSize}px system-ui, sans-serif`;
+        ctx.fillText(ellipsize(ctx, name, tw), tx, m + (nameH - nameSize));
+        top = m + nameH + Math.round(m * 0.6);
+      }
       const cut = ref.lastIndexOf('-');
       const lines = cut > 0 && cut < ref.length - 1 ? [ref.slice(0, cut + 1), ref.slice(cut + 1)] : [ref];
-      const top = m + nameH + Math.round(m * 0.6), avail = H - top - m;
+      const avail = H - top - m;
       const lineH = avail / lines.length;
       const longest = lines.reduce((a, b) => (a.length >= b.length ? a : b));
       const fs = fitFont(ctx, longest, 'ui-monospace, Menlo, Consolas, monospace', 'bold', tw, lineH * 1.05);
       ctx.font = `bold ${fs}px ui-monospace, Menlo, Consolas, monospace`;
-      lines.forEach((ln, i) => ctx.fillText(ln, tx, top + i * lineH + (lineH - fs) / 2));
+      // keep the lines together and centre the block in the space left
+      const step = Math.min(lineH, fs * 1.08), block = step * (lines.length - 1) + fs;
+      const y0 = top + Math.max(0, (avail - block) / 2);
+      lines.forEach((ln, i) => ctx.fillText(ln, tx, y0 + i * step));
     }
 
     // Thermal printers are 1-bit: snap every pixel to pure black or white

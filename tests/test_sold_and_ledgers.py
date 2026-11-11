@@ -192,3 +192,18 @@ assert spend(d3) == 100 - 25
 html = c.get(f"/items/{d3}").data.decode()
 assert "Put back" not in html and "Remove" in html and "qr-preview" not in html and "item-layout" in html
 print("ALL OK (edit parts, pickers, chain)")
+
+# 12. compact QR links, label printer settings saved once
+post("/settings", {"action": "general", "site_name": "RelicBox", "currency": "£", "ref_prefix": "RC-", "ref_digits": "5",
+                   "ref_next": "900", "label_format": "qr", "public_url": "https://relicbox.0x37.net",
+                   "nb_size": "30x12", "nb_density": "3", "nb_qr": "ref", "nb_name": "0"})
+html = c.get(f"/items/{item}/label").data.decode()
+assert 'data-size="30x12"' in html and 'data-density="3"' in html and 'data-name="0"' in html
+assert f'data-qr="{row(item)["ref"]}"' in html                       # reference only
+assert f"HTTPS://RELICBOX.0X37.NET/A/{row(item)['ref']}" in html      # paper label still links, in capitals
+r = c.get(f"/A/{row(item)['ref']}"); assert r.status_code == 302 and r.headers["Location"].endswith(f"/items/{item}")
+r = c.get("/lookup", query_string={"code": f"HTTPS://RELICBOX.0X37.NET/A/{row(item)['ref']}"})
+assert r.headers["Location"].endswith(f"/items/{item}")
+import qr as qrmod
+assert len(qrmod.matrix(f"HTTPS://RELICBOX.0X37.NET/A/{row(item)['ref']}")) == 25   # one size smaller than lowercase
+print("ALL OK (labels)")

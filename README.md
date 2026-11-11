@@ -94,7 +94,9 @@ Labels are QR codes by default. They encode `<your address>/a/<ref>`, so any pho
 
 ### Bluetooth label printers (NIIMBOT)
 
-The label page can print straight to a NIIMBOT printer (e.g. D110) over Bluetooth, using [NiimBlueLib](https://github.com/MultiMote/niimbluelib) (MIT), bundled at build time. Pick the label size (22×12, 30×12, 40×12 or 30×15 mm), tap **Connect printer**, choose it in the list, then **Print**. A search result prints as one job. Each label has the QR on the left, with the name and the reference (split as `000-` / `094`) on the right.
+The label page can print straight to a NIIMBOT printer (e.g. D110) over Bluetooth, using [NiimBlueLib](https://github.com/MultiMote/niimbluelib) (MIT), bundled at build time. Set it up once in **Settings → Bluetooth label printer**: label size (22×12, 30×12, 40×12 or 30×15 mm), darkness, what the QR holds (the link, which opens from any phone camera, or just the reference, which is smaller but only works with RelicBox's Scan page), and whether to show the item name. Then on any label page tap **Connect printer**, choose it in the list, and **Print**. A search result prints as one job. The QR sits on the left, clear of the label's rounded corners, with the name and the reference (split as `000-` / `094`) on the right.
+
+QR links are written in capitals (`HTTPS://HOST/A/000-094`) when the address allows. Web addresses ignore case, and QR codes store capitals much more compactly, so the code is a size smaller.
 
 This needs Chrome on Android (or Chrome/Edge on a computer) and an `https://` address. iPhone browsers don't support Web Bluetooth.
 

@@ -49,16 +49,40 @@ def _data_capacity(version):
     return sum(n * d for n, d in groups)
 
 
-def _encode_data(payload, version):
+ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+
+
+def _is_alnum(text):
+    return all(ch in ALNUM for ch in text)
+
+
+def _data_bits(text, version):
+    """Bits needed for the text: alphanumeric mode when possible (denser), otherwise bytes."""
+    if _is_alnum(text):
+        n = len(text)
+        return 4 + (9 if version < 10 else 11) + 11 * (n // 2) + 6 * (n % 2)
+    return 4 + (8 if version < 10 else 16) + 8 * len(text.encode("utf-8"))
+
+
+def _encode_data(text, version):
     bits = []
 
     def put(val, n):
         bits.extend((val >> i) & 1 for i in reversed(range(n)))
 
-    put(0b0100, 4)
-    put(len(payload), 8 if version < 10 else 16)
-    for b in payload:
-        put(b, 8)
+    if _is_alnum(text):
+        put(0b0010, 4)
+        put(len(text), 9 if version < 10 else 11)
+        for i in range(0, len(text) - 1, 2):
+            put(ALNUM.index(text[i]) * 45 + ALNUM.index(text[i + 1]), 11)
+        if len(text) % 2:
+            put(ALNUM.index(text[-1]), 6)
+    else:
+        payload = text.encode("utf-8")
+        put(0b0100, 4)
+        put(len(payload), 8 if version < 10 else 16)
+        for b in payload:
+            put(b, 8)
     cap = _data_capacity(version) * 8
     put(0, min(4, cap - len(bits)))
     put(0, (-len(bits)) % 8)
@@ -213,14 +237,12 @@ class _Matrix:
 
 
 def matrix(text):
-    payload = text.encode("utf-8")
     for version in range(1, 11):
-        header = 4 + (8 if version < 10 else 16)
-        if header + len(payload) * 8 <= _data_capacity(version) * 8:
+        if _data_bits(text, version) <= _data_capacity(version) * 8:
             break
     else:
         raise ValueError("Text too long for QR label")
-    cw = _add_ec_and_interleave(_encode_data(payload, version), version)
+    cw = _add_ec_and_interleave(_encode_data(text, version), version)
     best, best_score = None, None
     # Mask 2 (vertical stripes) is valid but some camera decoders struggle with it, so skip it.
     for mask in (0, 1, 3, 4, 5, 6, 7):

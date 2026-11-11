@@ -74,6 +74,7 @@ PART_OUTCOMES = {
     "scrapped": "Scrapped",
 }
 DISPOSED = dbm.DISPOSED
+NB_SIZES = {"22x12": "22 × 12 mm", "30x12": "30 × 12 mm", "40x12": "40 × 12 mm", "30x15": "30 × 15 mm"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
 
 
@@ -565,6 +566,10 @@ def inject():
         "item_label": item_label,
         "label_format": setting("label_format", "qr"),
         "item_qr_url": item_qr_url,
+        "label_qr_content": label_qr_content,
+        "nb": {"size": setting("nb_size", "22x12"), "density": int(setting("nb_density", "2") or 2),
+               "qr": setting("nb_qr", "link"), "name": setting("nb_name", "1") == "1"},
+        "NB_SIZES": NB_SIZES,
         "cost_basis": cost_basis,
         "known_cost": known_cost,
         "app_version": APP_VERSION,
@@ -1402,10 +1407,24 @@ def base_url():
 
 
 def item_qr_url(ref):
-    """What goes inside an item's QR label: a link that opens the item from any phone camera."""
-    return f"{base_url()}/a/{quote(ref, safe='-_.')}"
+    """What goes inside an item's QR label: a link that opens the item from any phone camera.
+
+    Written in capitals where possible (HTTPS://HOST/A/REF): web addresses ignore case, and QR codes
+    hold capitals, digits and - . / : far more compactly, so the code is a size smaller."""
+    base = base_url()
+    parts = urlsplit(base)
+    upper = f"{parts.scheme}://{parts.netloc}/A/{ref}".upper()
+    if parts.path in ("", "/") and not parts.query and qr._is_alnum(upper):
+        return upper
+    return f"{base}/a/{quote(ref, safe='-_.')}"
 
 
+def label_qr_content(ref):
+    """QR content for Bluetooth labels: the link, or just the reference (smaller; RelicBox scanner only)."""
+    return ref if setting("nb_qr", "link") == "ref" else item_qr_url(ref)
+
+
+@app.route("/A/<path:ref>")
 @app.route("/a/<path:ref>")
 def item_by_ref(ref):
     row = q("SELECT id FROM items WHERE ref = ? COLLATE NOCASE", (ref,), one=True)
@@ -1471,7 +1490,7 @@ def lookup():
         m = re.search(r"/items/(\d+)$", path)
         if m and q("SELECT 1 FROM items WHERE id = ?", (int(m.group(1)),), one=True):
             return redirect(url_for("item_view", item_id=int(m.group(1))))
-        m = re.search(r"/a/([^/]+)$", path)
+        m = re.search(r"/a/([^/]+)$", path, re.I)
         if m:
             code = unquote(m.group(1))
     row = q("SELECT * FROM items WHERE ref = ? COLLATE NOCASE", (code,), one=True)
@@ -1762,6 +1781,10 @@ def settings_page():
             if pub and not re.match(r"https?://", pub):
                 pub = "https://" + pub
             set_setting("public_url", pub)
+            set_setting("nb_size", request.form.get("nb_size") if request.form.get("nb_size") in NB_SIZES else "22x12")
+            set_setting("nb_density", max(1, min(int_or_none(request.form.get("nb_density")) or 2, 5)))
+            set_setting("nb_qr", "ref" if request.form.get("nb_qr") == "ref" else "link")
+            set_setting("nb_name", "1" if request.form.get("nb_name") == "1" else "0")
             digits = int_or_none(request.form.get("ref_digits")) or 5
             set_setting("ref_digits", max(1, min(digits, 10)))
             nxt = int_or_none(request.form.get("ref_next"))
@@ -1805,7 +1828,7 @@ def settings_page():
     usage = {r["descriptor_type_id"]: r["n"] for r in
              q("SELECT descriptor_type_id, COUNT(*) AS n FROM item_descriptors GROUP BY descriptor_type_id")}
     s = {k: setting(k, "") for k in ("site_name", "currency", "ref_prefix", "ref_digits", "ref_next",
-                                      "label_format", "public_url")}
+                                      "label_format", "public_url", "nb_size", "nb_density", "nb_qr", "nb_name")}
     return render_template("settings.html", s=s, dts=descriptor_types(), usage=usage)
 
 

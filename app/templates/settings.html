@@ -23,6 +23,23 @@
         <label>Address used in QR labels<input name="public_url" value="{{ s.public_url }}" placeholder="{{ request.host_url.rstrip('/') }}"></label>
       </div>
       <p class="hint">Set the address to the one you use from your phone, e.g. your reverse-proxy HTTPS address. If you leave it blank, labels use whatever address you're browsing on now.</p>
+      <h3 style="margin-top:1rem">Bluetooth label printer</h3>
+      <div class="grid">
+        <label>Label size<select name="nb_size">
+          {% for k, v in NB_SIZES.items() %}<option value="{{ k }}" {{ 'selected' if (s.nb_size or '22x12') == k }}>{{ v }}</option>{% endfor %}
+        </select></label>
+        <label>Darkness<select name="nb_density">
+          {% for i in range(1, 6) %}<option value="{{ i }}" {{ 'selected' if (s.nb_density or '2')|int == i }}>{{ i }}{{ ' (normal for D110)' if i == 2 }}{{ ' (D110_M only)' if i > 3 }}</option>{% endfor %}
+        </select></label>
+        <label>QR code holds<select name="nb_qr">
+          <option value="link" {{ 'selected' if s.nb_qr != 'ref' }}>Link: opens from any phone camera</option>
+          <option value="ref" {{ 'selected' if s.nb_qr == 'ref' }}>Reference only: smaller, RelicBox scanner only</option>
+        </select></label>
+        <label>Item name<select name="nb_name">
+          <option value="1" {{ 'selected' if s.nb_name != '0' }}>Show above the reference</option>
+          <option value="0" {{ 'selected' if s.nb_name == '0' }}>Leave off (bigger reference)</option>
+        </select></label>
+      </div>
       <p class="hint">Next new item will be <code class="ref">{{ s.ref_prefix }}{{ '%0*d' % (s.ref_digits|int, s.ref_next|int) }}</code>. You can always type your own reference when adding an item.</p>
     </fieldset>
     <div class="formbar"><button class="btn primary">Save</button></div>
