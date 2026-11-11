@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS ix_work_log_item ON work_log(item_id, date);
 """
 
 DEFAULT_SETTINGS = {
-    "schema_version": "7",
+    "schema_version": "8",
     "label_format": "qr",
     "public_url": "",
     "ref_prefix": "RC-",
@@ -178,7 +178,24 @@ def migrate(conn):
                         WHERE harvested_from_id IS NOT NULL""")
     if "taken_off_new" not in cols:
         conn.execute("ALTER TABLE items ADD COLUMN taken_off_new INTEGER NOT NULL DEFAULT 0")
-    conn.execute("UPDATE settings SET value = '7' WHERE key = 'schema_version'")
+    # v8: labels from other RelicBox collections. Each install has a short collection code that goes in
+    # its QR labels (RB:<code>:<ref>); an item that came from another collection keeps that collection's
+    # label in foreign_label so it still scans.
+    if "foreign_label" not in _columns(conn, "items"):
+        conn.execute("ALTER TABLE items ADD COLUMN foreign_label TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_items_foreign_label ON items(foreign_label)")
+    if not conn.execute("SELECT 1 FROM settings WHERE key = 'collection_code'").fetchone():
+        conn.execute("INSERT INTO settings(key, value) VALUES ('collection_code', ?)", (new_collection_code(),))
+    conn.execute("UPDATE settings SET value = 'code' WHERE key = 'nb_qr' AND value = 'ref'")
+    conn.execute("UPDATE settings SET value = '8' WHERE key = 'schema_version'")
+
+
+CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O or 1/I, so codes are easy to read
+
+
+def new_collection_code(length=4):
+    import secrets
+    return "".join(secrets.choice(CODE_CHARS) for _ in range(length))
 
 
 def refresh_moved_out(conn):

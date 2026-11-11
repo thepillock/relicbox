@@ -22,7 +22,18 @@
         </select></label>
         <label>Address used in QR labels<input name="public_url" value="{{ s.public_url }}" placeholder="{{ request.host_url.rstrip('/') }}"></label>
       </div>
-      <p class="hint">Set the address to the one you use from your phone, e.g. your reverse-proxy HTTPS address. If you leave it blank, labels use whatever address you're browsing on now.</p>
+      <div class="grid" style="margin-top:.7rem">
+        <label>QR labels hold<select name="nb_qr">
+          <option value="code" {{ 'selected' if s.nb_qr == 'code' }}>Collection code + reference (smallest; scan in RelicBox)</option>
+          <option value="link" {{ 'selected' if s.nb_qr != 'code' }}>Link (also opens from a phone's camera app)</option>
+        </select></label>
+        <label>Collection code<input name="collection_code" value="{{ s.collection_code }}" maxlength="8" class="mono" autocomplete="off" style="text-transform:uppercase"></label>
+      </div>
+      <p class="hint">The collection code makes your labels unique to this collection: a code label holds
+        <code>RB:{{ s.collection_code }}:{{ s.ref_prefix }}{{ '%0*d' % (s.ref_digits|int, 94 if s.ref_digits|int >= 2 else 1) }}</code>.
+        If someone else's RelicBox label turns up, it won't open the wrong item of yours, and an item that changes hands can keep its label.
+        2–8 letters or digits. If you change it, labels printed with the old code{% if s.collection_codes_old %} ({{ s.collection_codes_old }}){% endif %} still work.</p>
+      <p class="hint">Set the address to the one you use from your phone, e.g. your reverse-proxy HTTPS address. If you leave it blank, labels use whatever address you're browsing on now. It's only used for link labels.</p>
       <h3 style="margin-top:1rem">Bluetooth label printer</h3>
       <div class="grid">
         <label>Label size<select name="nb_size">
@@ -31,10 +42,7 @@
         <label>Darkness<select name="nb_density">
           {% for i in range(1, 6) %}<option value="{{ i }}" {{ 'selected' if (s.nb_density or '2')|int == i }}>{{ i }}{{ ' (normal for D110)' if i == 2 }}{{ ' (D110_M only)' if i > 3 }}</option>{% endfor %}
         </select></label>
-        <label>QR code holds<select name="nb_qr">
-          <option value="link" {{ 'selected' if s.nb_qr != 'ref' }}>Link: opens from any phone camera</option>
-          <option value="ref" {{ 'selected' if s.nb_qr == 'ref' }}>Reference only: smaller, RelicBox scanner only</option>
-        </select></label>
+
         <label>Item name<select name="nb_name">
           <option value="1" {{ 'selected' if s.nb_name != '0' }}>Show above the reference</option>
           <option value="0" {{ 'selected' if s.nb_name == '0' }}>Leave off (bigger reference)</option>

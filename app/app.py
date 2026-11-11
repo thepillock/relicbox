@@ -567,6 +567,7 @@ def inject():
         "label_format": setting("label_format", "qr"),
         "item_qr_url": item_qr_url,
         "label_qr_content": label_qr_content,
+        "collection_codes": collection_codes,
         "nb": {"size": setting("nb_size", "22x12"), "density": int(setting("nb_density", "2") or 2),
                "qr": setting("nb_qr", "link"), "name": setting("nb_name", "1") == "1"},
         "NB_SIZES": NB_SIZES,
@@ -738,6 +739,9 @@ def item_new():
         item_id = ex(f"INSERT INTO items({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
                      [data[c] for c in cols])
         save_descriptors(item_id, request.form)
+        fl = (request.form.get("foreign_label") or "").strip().upper()
+        if RB_LABEL.fullmatch(fl):
+            ex("UPDATE items SET foreign_label = ? WHERE id = ?", (fl, item_id))
         for fs in request.files.getlist("photos"):
             save_photo(item_id, fs)
         commit()
@@ -751,6 +755,7 @@ def item_new():
     f = {
         "location_id": request.args.get("location_id", ""),
         "barcode": request.args.get("barcode", ""),
+        "foreign_label": request.args.get("foreign_label", ""),
         "status": "active",
         "quantity": 1,
     }
@@ -1419,9 +1424,24 @@ def item_qr_url(ref):
     return f"{base}/a/{quote(ref, safe='-_.')}"
 
 
+def collection_codes():
+    """This collection's code, plus any it used before (so labels printed under an old code still scan)."""
+    codes = [setting("collection_code", "") or ""]
+    codes += [c for c in (setting("collection_codes_old", "") or "").split(",") if c]
+    return [c.upper() for c in codes if c]
+
+
+def collection_label(ref):
+    return f"RB:{(setting('collection_code', '') or '').upper()}:{ref.upper()}"
+
+
 def label_qr_content(ref):
-    """QR content for Bluetooth labels: the link, or just the reference (smaller; RelicBox scanner only)."""
-    return ref if setting("nb_qr", "link") == "ref" else item_qr_url(ref)
+    """What QR labels hold: the collection code + reference (compact, unique to this collection,
+    read by RelicBox's scanner), or a link that also opens from a phone's camera app."""
+    return collection_label(ref) if setting("nb_qr", "link") == "code" else item_qr_url(ref)
+
+
+RB_LABEL = re.compile(r"RB:([A-Z0-9]{2,8}):(.+)", re.I)
 
 
 @app.route("/A/<path:ref>")
@@ -1476,6 +1496,17 @@ def lookup():
     code = (request.args.get("code") or "").strip()
     if not code:
         return redirect(url_for("scan"))
+    m = RB_LABEL.fullmatch(code)
+    if m:
+        ccode, ref = m.group(1).upper(), m.group(2).strip()
+        if ccode in collection_codes():
+            code = ref                               # one of ours: look the reference up as usual
+        else:
+            label = f"RB:{ccode}:{ref.upper()}"
+            row = q("SELECT id FROM items WHERE foreign_label = ? COLLATE NOCASE", (label,), one=True)
+            if row:
+                return redirect(url_for("item_view", item_id=row["id"]))
+            return render_template("foreign_label.html", label=label, ccode=ccode, ref=ref)
     # A scanned QR may hold a URL: our own /a/<ref> or /items/<id>, or an old Homebox /item/<uuid> label.
     if "://" in code or code.startswith("/"):
         path = urlsplit(code).path
@@ -1504,6 +1535,21 @@ def lookup():
                                loc=None, locations=location_tree(),
                                totals=list_totals(rows))
     return render_template("scan.html", not_found=code)
+
+
+@app.route("/labels/claim", methods=["POST"])
+def label_claim():
+    """Link a label from another RelicBox collection to an item already in this one."""
+    label = (request.form.get("label") or "").strip().upper()
+    item = resolve_item(request.form.get("item") or "")
+    if not RB_LABEL.fullmatch(label) or not item:
+        flash("Choose the item this label belongs to.", "error")
+        return redirect(url_for("lookup", code=label))
+    ex("UPDATE items SET foreign_label = NULL WHERE foreign_label = ?", (label,))
+    ex("UPDATE items SET foreign_label = ?, updated_at = ? WHERE id = ?", (label, now(), item["id"]))
+    commit()
+    flash(f"That label now opens {item['ref']} {item['name']}", "ok")
+    return redirect(url_for("item_view", item_id=item["id"]))
 
 
 @app.route("/api/items")
@@ -1783,7 +1829,18 @@ def settings_page():
             set_setting("public_url", pub)
             set_setting("nb_size", request.form.get("nb_size") if request.form.get("nb_size") in NB_SIZES else "22x12")
             set_setting("nb_density", max(1, min(int_or_none(request.form.get("nb_density")) or 2, 5)))
-            set_setting("nb_qr", "ref" if request.form.get("nb_qr") == "ref" else "link")
+            set_setting("nb_qr", "code" if request.form.get("nb_qr") == "code" else "link")
+            new_code = re.sub(r"[^A-Z0-9]", "", (request.form.get("collection_code") or "").upper())
+            old_code = (setting("collection_code", "") or "").upper()
+            if new_code and new_code != old_code:
+                if not 2 <= len(new_code) <= 8:
+                    flash("The collection code must be 2 to 8 letters or digits; it wasn't changed.", "error")
+                else:
+                    previous = [c for c in (setting("collection_codes_old", "") or "").split(",") if c and c != new_code]
+                    if old_code and old_code not in previous:
+                        previous.append(old_code)
+                    set_setting("collection_codes_old", ",".join(previous))
+                    set_setting("collection_code", new_code)
             set_setting("nb_name", "1" if request.form.get("nb_name") == "1" else "0")
             digits = int_or_none(request.form.get("ref_digits")) or 5
             set_setting("ref_digits", max(1, min(digits, 10)))
@@ -1828,7 +1885,8 @@ def settings_page():
     usage = {r["descriptor_type_id"]: r["n"] for r in
              q("SELECT descriptor_type_id, COUNT(*) AS n FROM item_descriptors GROUP BY descriptor_type_id")}
     s = {k: setting(k, "") for k in ("site_name", "currency", "ref_prefix", "ref_digits", "ref_next",
-                                      "label_format", "public_url", "nb_size", "nb_density", "nb_qr", "nb_name")}
+                                      "label_format", "public_url", "nb_size", "nb_density", "nb_qr", "nb_name",
+                                      "collection_code", "collection_codes_old")}
     return render_template("settings.html", s=s, dts=descriptor_types(), usage=usage)
 
 

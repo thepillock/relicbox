@@ -90,11 +90,22 @@ Chrome on Android uses the built-in barcode detector. iPhone Safari and Firefox 
 
 ## Labels
 
-Labels are QR codes by default. They encode `<your address>/a/<ref>`, so any phone camera opens the item directly. Set **Settings → Address used in QR labels** to the address you use on your phone (e.g. your HTTPS reverse-proxy name) *before* printing. You can switch to Code 128 barcodes in Settings.
+Labels are QR codes by default (you can switch to Code 128 barcodes in Settings). **Settings → QR labels hold** chooses what goes in the QR, for both paper and Bluetooth labels:
+
+- **Collection code + reference** (e.g. `RB:K7Q2:000-094`): the smallest QR, and it keeps working if your web address changes. Scan it with RelicBox's Scan page.
+- **Link** (`<your address>/a/<ref>`): any phone camera opens the item directly. Set **Settings → Address used in QR labels** to the address you use on your phone (e.g. your HTTPS reverse-proxy name) *before* printing.
+
+#### Collection codes
+
+Each install gets a random 4-character collection code, which you can change in **Settings → Collection code** (2–8 letters or digits). It makes labels unique across collections:
+
+- Scanning a RelicBox label from someone else's collection never opens the wrong item of yours. Instead you get a "Label from another collection" page.
+- If an item has come to you from another collection, that page lets you add it as a new item or link the label to an item you already have. Either way, the old label then opens the item here, so it doesn't need relabelling.
+- If you change your code, labels printed with the old code still work.
 
 ### Bluetooth label printers (NIIMBOT)
 
-The label page can print straight to a NIIMBOT printer (e.g. D110) over Bluetooth, using [NiimBlueLib](https://github.com/MultiMote/niimbluelib) (MIT), bundled at build time. Set it up once in **Settings → Bluetooth label printer**: label size (22×12, 30×12, 40×12 or 30×15 mm), darkness, what the QR holds (the link, which opens from any phone camera, or just the reference, which is smaller but only works with RelicBox's Scan page), and whether to show the item name. Then on any label page tap **Connect printer**, choose it in the list, and **Print**. A search result prints as one job. The QR sits on the left, clear of the label's rounded corners, with the name and the reference (split as `000-` / `094`) on the right.
+The label page can print straight to a NIIMBOT printer (e.g. D110) over Bluetooth, using [NiimBlueLib](https://github.com/MultiMote/niimbluelib) (MIT), bundled at build time. Set it up once in **Settings → Bluetooth label printer**: label size (22×12, 30×12, 40×12 or 30×15 mm), darkness, and whether to show the item name. Then on any label page tap **Connect printer**, choose it in the list, and **Print**. A search result prints as one job. The QR sits on the left, clear of the label's rounded corners, with the name and the reference (split as `000-` / `094`) on the right.
 
 QR links are written in capitals (`HTTPS://HOST/A/000-094`) when the address allows. Web addresses ignore case, and QR codes store capitals much more compactly, so the code is a size smaller.
 

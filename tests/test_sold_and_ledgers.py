@@ -193,17 +193,41 @@ html = c.get(f"/items/{d3}").data.decode()
 assert "Put back" not in html and "Remove" in html and "qr-preview" not in html and "item-layout" in html
 print("ALL OK (edit parts, pickers, chain)")
 
-# 12. compact QR links, label printer settings saved once
-post("/settings", {"action": "general", "site_name": "RelicBox", "currency": "£", "ref_prefix": "RC-", "ref_digits": "5",
-                   "ref_next": "900", "label_format": "qr", "public_url": "https://relicbox.0x37.net",
-                   "nb_size": "30x12", "nb_density": "3", "nb_qr": "ref", "nb_name": "0"})
+# 12. QR labels: collection code + reference, or compact links; printer settings saved once
+import db as dbm2
+con = sqlite3.connect(DB); code = con.execute("SELECT value FROM settings WHERE key = 'collection_code'").fetchone()[0]; con.close()
+assert len(code) == 4 and all(ch in dbm2.CODE_CHARS for ch in code)
+base = {"action": "general", "site_name": "RelicBox", "currency": "£", "ref_prefix": "RC-", "ref_digits": "5", "ref_next": "900",
+        "label_format": "qr", "public_url": "https://relicbox.0x37.net", "nb_size": "30x12", "nb_density": "3", "nb_name": "0"}
+post("/settings", dict(base, nb_qr="code", collection_code=code))
+ref_ = row(item)["ref"]
 html = c.get(f"/items/{item}/label").data.decode()
 assert 'data-size="30x12"' in html and 'data-density="3"' in html and 'data-name="0"' in html
-assert f'data-qr="{row(item)["ref"]}"' in html                       # reference only
-assert f"HTTPS://RELICBOX.0X37.NET/A/{row(item)['ref']}" in html      # paper label still links, in capitals
-r = c.get(f"/A/{row(item)['ref']}"); assert r.status_code == 302 and r.headers["Location"].endswith(f"/items/{item}")
-r = c.get("/lookup", query_string={"code": f"HTTPS://RELICBOX.0X37.NET/A/{row(item)['ref']}"})
-assert r.headers["Location"].endswith(f"/items/{item}")
+assert f'data-qr="RB:{code}:{ref_}"' in html                           # Bluetooth label
+assert f"qr.svg?d=RB:{code}:{ref_}" in html.replace("%3A", ":")         # paper label too
 import qr as qrmod
-assert len(qrmod.matrix(f"HTTPS://RELICBOX.0X37.NET/A/{row(item)['ref']}")) == 25   # one size smaller than lowercase
+assert len(qrmod.matrix(f"RB:{code}:{ref_}")) == 21                     # the smallest QR size
+# scanning our own code label opens the item
+r = c.get("/lookup", query_string={"code": f"RB:{code}:{ref_}"}); assert r.headers["Location"].endswith(f"/items/{item}")
+# changing the code: new labels use it, old labels still work
+post("/settings", dict(base, nb_qr="code", collection_code="zx9"))
+con = sqlite3.connect(DB); assert con.execute("SELECT value FROM settings WHERE key = 'collection_code'").fetchone()[0] == "ZX9"; con.close()
+r = c.get("/lookup", query_string={"code": f"RB:{code}:{ref_}"}); assert r.headers["Location"].endswith(f"/items/{item}")
+r = post("/settings", dict(base, nb_qr="code", collection_code="X")); assert b"2 to 8 letters" in r.data
+# a label from another collection doesn't open our item with the same reference
+r = c.get("/lookup", query_string={"code": f"RB:QQQQ:{ref_}"})
+assert r.status_code == 200 and b"Label from another collection" in r.data
+# ...add it as a new item that keeps the label
+r = post(f"/items/new", {"name": "Swapped-in Amiga", "foreign_label": f"RB:QQQQ:{ref_}"})
+swapped = int(re.search(r"/items/(\d+)", r.request.path).group(1))
+assert row(swapped)["foreign_label"] == f"RB:QQQQ:{ref_}" and b"Label from another collection" in r.data
+r = c.get("/lookup", query_string={"code": f"rb:qqqq:{ref_.lower()}"}); assert r.headers["Location"].endswith(f"/items/{swapped}")
+# ...or link it to an item already here
+post("/labels/claim", {"label": "RB:WWWW:000-001", "item": row(outer)["ref"]})
+r = c.get("/lookup", query_string={"code": "RB:WWWW:000-001"}); assert r.headers["Location"].endswith(f"/items/{outer}")
+# links are still compact when chosen
+post("/settings", dict(base, nb_qr="link", collection_code="ZX9"))
+html = c.get(f"/items/{item}/label").data.decode()
+assert f'data-qr="HTTPS://RELICBOX.0X37.NET/A/{ref_}"' in html
+r = c.get(f"/A/{ref_}"); assert r.status_code == 302 and r.headers["Location"].endswith(f"/items/{item}")
 print("ALL OK (labels)")

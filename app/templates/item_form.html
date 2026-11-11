@@ -7,6 +7,8 @@
   {% if item %}<a class="btn" href="{{ url_for('item_view', item_id=item.id) }}">Cancel</a>{% endif %}
 </div>
 <form method="post" enctype="multipart/form-data" class="stack">
+  {% if f.foreign_label %}<input type="hidden" name="foreign_label" value="{{ f.foreign_label }}">
+  <p class="flash ok">This item will keep its label from the other collection, <code>{{ f.foreign_label }}</code>, so scanning it opens the item here.</p>{% endif %}
   <fieldset>
     <legend>Item</legend>
     <div class="grid">

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Label from another collection{% endblock %}
+{% block body %}
+<h1>Label from another collection</h1>
+<div class="panel" style="max-width:640px">
+  <p>This is a RelicBox label from collection <code class="ref big">{{ ccode }}</code> (yours is
+    <code class="ref">{{ (collection_codes()[0] if collection_codes() else '') }}</code>), for its item
+    <code class="ref big">{{ ref }}</code>.</p>
+  <p class="muted">If the item has come to you from that collection, you can keep its label: scanning it will then open the item here.</p>
+  <div class="actions" style="margin:1rem 0">
+    <a class="btn primary" href="{{ url_for('item_new', foreign_label=label) }}">Add it as a new item</a>
+    <a class="btn" href="{{ url_for('scan') }}">Scan something else</a>
+  </div>
+  <form method="post" action="{{ url_for('label_claim') }}" class="filters">
+    <input type="hidden" name="label" value="{{ label }}">
+    <input name="item" class="item-picker" list="item-options" autocomplete="off" placeholder="…or it's an item I already have (ref or name)">
+    <button>Link label</button>
+  </form>
+</div>
+{% endblock %}

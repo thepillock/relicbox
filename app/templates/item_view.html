@@ -36,6 +36,7 @@
     <dl class="facts">
       {% for d in descriptors %}<dt>{{ d.name }}</dt><dd>{{ d.value }}</dd>{% endfor %}
       {% if item.barcode %}<dt>Product barcode</dt><dd class="mono">{{ item.barcode }}</dd>{% endif %}
+      {% if item.foreign_label %}<dt>Label from another collection</dt><dd class="mono">{{ item.foreign_label }}</dd>{% endif %}
       {% if donor %}<dt>Harvested from</dt><dd><a href="{{ url_for('item_view', item_id=donor.id) }}">{{ donor.ref }} — {{ donor.name }}</a></dd>{% endif %}
     </dl>
     {% if not item.description and not descriptors and not item.barcode and not donor %}<p class="muted small">No details yet · <a href="{{ url_for('item_edit', item_id=item.id) }}">Edit</a></p>{% endif %}

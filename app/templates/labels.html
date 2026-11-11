@@ -19,7 +19,7 @@
   <div class="ledger-head" style="margin-top:0">
     <h2>Bluetooth label printer <small class="muted">NIIMBOT D110 and similar</small></h2>
   </div>
-  <p class="muted small">{{ NB_SIZES[nb.size] }} · darkness {{ nb.density }} · QR {{ 'with link' if nb.qr == 'link' else 'reference only' }} · name {{ 'shown' if nb.name else 'off' }}
+  <p class="muted small">{{ NB_SIZES[nb.size] }} · darkness {{ nb.density }} · QR {{ 'with link' if nb.qr == 'link' else 'with collection code ' ~ collection_codes()[0] }} · name {{ 'shown' if nb.name else 'off' }}
     · <a href="{{ url_for('settings_page') }}">change in Settings</a></p>
   <div class="niimbot-controls" data-size="{{ nb.size }}" data-density="{{ nb.density }}" data-name="{{ 1 if nb.name else 0 }}" id="nb-opts">
     <button type="button" class="btn" id="nb-connect">Connect printer</button>
@@ -47,7 +47,7 @@
   </div>
   {% else %}
   <div class="label qr">
-    <img src="{{ url_for('qr_svg', d=item_qr_url(it.ref)) }}" alt="">
+    <img src="{{ url_for('qr_svg', d=label_qr_content(it.ref)) }}" alt="">
     <div class="l-text">
       <div class="l-ref">{{ it.ref }}</div>
       <div class="l-name">{{ it.name }}</div>
