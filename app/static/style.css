@@ -195,7 +195,7 @@ form.rename input { flex: 1; }
 /* scanner */
 .scanner { position: relative; background: #000; border-radius: var(--radius); overflow: hidden; aspect-ratio: 4/3; max-width: 560px; margin: .5rem 0 1rem; }
 .scanner video { width: 100%; height: 100%; object-fit: cover; display: block; }
-.scan-frame { position: absolute; inset: 30% 12%; border: 3px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); pointer-events: none; }
+.scan-frame { position: absolute; inset: 14% 27%; border: 3px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); pointer-events: none; }
 .scan-status { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; padding: .5rem .8rem; background: rgba(0,0,0,.6); color: #fff; font-size: .9rem; }
 .scan-dialog { border: 0; border-radius: 14px; padding: .8rem; width: min(560px, 94vw); background: var(--panel); color: var(--ink); }
 .scan-dialog::backdrop { background: rgba(0,0,0,.6); }
@@ -386,3 +386,6 @@ button.armed, .btn.armed, button.link.armed { background: var(--bad) !important;
   table.ledger.parts tr.view-row td.row-actions { order: 6; align-self: center; }
   table.ledger.parts tr.view-row td:nth-child(3) { flex: 1 1 auto; }
 }
+
+.scan-photo { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; margin: 0 0 1rem; }
+.scan-dialog .actions { margin-top: .6rem; }

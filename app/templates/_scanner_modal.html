@@ -4,7 +4,10 @@
     <div class="scan-frame"></div>
     <p class="scan-status" id="dlg-status"></p>
   </div>
-  <button type="button" class="btn" id="dlg-close">Cancel</button>
+  <div class="actions">
+    <label class="btn">📷 Scan a photo<input type="file" accept="image/*" capture="environment" hidden id="dlg-photo"></label>
+    <button type="button" class="btn" id="dlg-close">Cancel</button>
+  </div>
 </dialog>
 <script src="{{ url_for('static', filename='vendor/zxing.min.js') }}" onerror="void 0"></script>
 <script src="{{ url_for('static', filename='scanner.js') }}"></script>
@@ -20,6 +23,15 @@
     });
   }));
   document.getElementById('dlg-close').addEventListener('click', () => { Scanner.stop(); dlg.close(); });
+  document.getElementById('dlg-photo').addEventListener('change', async e => {
+    const f = e.target.files[0], st = document.getElementById('dlg-status');
+    if (!f) return;
+    st.textContent = 'Reading…';
+    const code = await Scanner.fromFile(f);
+    e.target.value = '';
+    if (code) { target.value = code; Scanner.stop(); dlg.close(); }
+    else st.textContent = "Couldn't find a code in that photo. Try again closer.";
+  });
   dlg.addEventListener('close', () => Scanner.stop());
 })();
 </script>

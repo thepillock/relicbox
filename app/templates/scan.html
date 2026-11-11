@@ -11,19 +11,29 @@
   <div class="scan-frame"></div>
   <p class="scan-status" id="scan-status">Starting camera…</p>
 </div>
+<p class="scan-photo"><label class="btn">📷 Scan a photo<input type="file" accept="image/*" capture="environment" hidden id="scan-photo"></label>
+  <span class="muted small" id="scan-photo-status">Takes a picture of the label and reads it. Works without HTTPS.</span></p>
 <form action="{{ url_for('lookup') }}" class="bigsearch">
   <input name="code" id="code" placeholder="…or type a reference / barcode" autocomplete="off" class="mono">
   <button>Find</button>
 </form>
-<p class="hint">Scans the item's reference label or any manufacturer barcode you've stored against an item.
-  Phone cameras only work when the site is served over HTTPS (or on localhost).</p>
+<p class="hint">Reads RelicBox labels, your old Homebox QR labels, and any product barcode stored against an item.
+  The live camera only works when the site is served over HTTPS (or on localhost); "Scan a photo" works either way.</p>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/zxing.min.js') }}" onerror="void 0"></script>
 <script src="{{ url_for('static', filename='scanner.js') }}"></script>
 <script>
-Scanner.start(document.getElementById('scan-video'), document.getElementById('scan-status'), code => {
-  location.href = '{{ url_for('lookup') }}?code=' + encodeURIComponent(code);
+const go = code => { location.href = '{{ url_for('lookup') }}?code=' + encodeURIComponent(code); };
+Scanner.start(document.getElementById('scan-video'), document.getElementById('scan-status'), go);
+document.getElementById('scan-photo').addEventListener('change', async e => {
+  const f = e.target.files[0], st = document.getElementById('scan-photo-status');
+  if (!f) return;
+  st.textContent = 'Reading…';
+  const code = await Scanner.fromFile(f);
+  if (code) { st.textContent = 'Found ' + code; go(code); }
+  else st.textContent = "Couldn't find a code in that photo. Try again closer, with the label filling more of the picture.";
+  e.target.value = '';
 });
 </script>
 {% endblock %}
